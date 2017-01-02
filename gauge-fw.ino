@@ -1,16 +1,15 @@
-#include <Adafruit_SSD1306.h>
 #include <Adafruit_NeoPixel.h>
-#include <Adafruit_GFX.h>
-#include <gfxfont.h>
 #include <ArduinoSTL.h>
+
+using namespace std;
 
 // analog sensor abstract?
 class AnalogSensor {
     protected:
         int analogPin;
         int measurement;
-        int read () {
-            this->measurement = analogRead(this->analogPin);
+        void read () {
+            measurement = analogRead(this->analogPin);
         }
     public:
         AnalogSensor (int pin) {
@@ -77,19 +76,24 @@ class MPX4250_Sensor : public AnalogSensor, public GaugeComponent {
 // gauge container that accepts multiple "GaugeComponent" elements
 //  which we are going to iterate and "tick"
 class CompositeGauge{
-  GaugeComponent *components[] = {};
-  int totalComponents;
-  std::vector<GaugeComponent*> comps;
+  vector<GaugeComponent*> components;
   public:
     CompositeGauge (void){}
     
-    void add(GaugeComponent * component){
-      this->comps.push_back(component);
+    void add(GaugeComponent *component){
+      this->components.push_back(component);
     }
     
     void tick(void) {
-      for (std::vector<GaugeComponent*>::iterator it = this->comps.begin(); it != this->comps.end(); ++it) {
+      vector<GaugeComponent*>::iterator it;
+      for (
+          it = this->components.begin();
+          it != this->components.end();
+          ++it
+        ) {
+         
         (*it)->tick();
+        
       }
     }
 };
@@ -97,142 +101,157 @@ class CompositeGauge{
 // a ring of rgb leds, that is aware of an analog sensor measurement, and
 //  illuminates the a certain amount of leds, based on its min and max levels
 //  additionally has "alert leds" which are activated when alertLevel is reached
-class NeoPixelRing : public GaugeComponent {
+class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
   protected:
-    AnalogSensor &sensor;
-    Adafruit_NeoPixel ring;
+    AnalogSensor *sensor;
     bool currentlyAlerting = false;
   public:
-    std::vector<int> sweepLeds;
-    std::vector<int> alertLeds;
+    vector<int> *sweepLeds;
+    vector<int> *alertLeds;
     int minLevel = 0;
     int maxLevel = 1;
     int alertLevel = 2;
-    int dataPin = 4;
     int *baseColor;
     int *alertColor;
+    bool init = false;
     
     NeoPixelRing(
-      AnalogSensor &sensor,
-      int dataPin,
+      AnalogSensor *sensor,
+      uint16_t dataPin,
+      uint8_t totalLeds,
       int minLevel,
       int maxLevel,
       int alertLevel,
       int baseColor[3],
       int alertColor[3],
-      int *sweepLeds,
-      int *alertLeds,
-      int totalLeds
-      ) : GaugeComponent() {
+      vector<int> *sweepLeds,
+      vector<int> *alertLeds
+      ) : GaugeComponent(),
+          Adafruit_NeoPixel(totalLeds, dataPin, NEO_GRB + NEO_KHZ800)
+       {
         this->sensor = sensor;
-        this->dataPin = dataPin;
         this->minLevel = minLevel;
         this->maxLevel = maxLevel;
+        this->alertLevel = alertLevel;
         this->baseColor = baseColor;
         this->alertColor = alertColor;
-        this->alertLevel = alertLevel;
-        this->setSweep(sweepLeds);
-        this->setAlert(alertLeds);
-        
-        // init ring
-        ring = Adafruit_NeoPixel(totalLeds, dataPin, NEO_GRB + NEO_KHZ800);
-        ring.begin();
-        ring.show();
+        this->sweepLeds = sweepLeds;
+        this->alertLeds = alertLeds;
+
+        begin();
+        show();
     }
-    
+
     bool isAlert() {
-      return sensor.raw() > this->alertLevel;
-    }
-
-    void setSweep(int leds[]) {
-      this->sweepLeds.insert(this->sweepLeds.begin(), leds);
-    }
-
-    void setAlert(int leds[]) {
-      this->alertLeds.insert(this->alertLeds.begin(), leds);
+      return sensor->raw() > this->alertLevel;
     }
     
-    void tick(void) {      
-      // calculate how many leds should be lit, by calculating the ranges
-      int relativeLevel = sensor.raw() - this->minLevel;
-      int sweepRange = this->maxLevel - this->minLevel;
-      float percentileLevel = relativeLevel / (float)sweepRange;
-      int howManyLeds = percentileLevel * this->sweepLeds.size() - 1;
-      std::vector<int>::iterator it = this->sweepLeds.begin();
-      for (int ledKey = 0; ledKey < this->sweepLeds.size(); ledKey++) {
-        if (ledKey < howManyLeds) {
-          this->ring.setPixelColor(*it, baseColor[0], baseColor[1], baseColor[2]);
-        } else {
-          this->ring.setPixelColor(*it, 0, 0, 0);
-        }
-        it++;
+    void tick(void) {
+      // for some reason I need to call this here, not @ the ctor
+      if (!init) {
+        begin();
       }
       
+      // calculate how many leds should be lit, by calculating the ranges
+      int relativeLevel = sensor->raw() - this->minLevel;
+      int sweepRange = this->maxLevel - this->minLevel;
+      float percentileLevel = relativeLevel / (float)sweepRange;
+      int howManyLeds = percentileLevel * this->sweepLeds->size() - 1;
+      
+      int ledKey = 0;
+      for (vector<int>::iterator it = this->sweepLeds->begin(); it != this->sweepLeds->end(); ++it) {
+        if (ledKey < howManyLeds) {
+          setPixelColor(*it, baseColor[0], baseColor[1], baseColor[2]);
+        } else {
+          setPixelColor(*it, 0, 0, 0);
+        }
+        ledKey++;
+      }
+
       // check if new reading triggered alert
       if (this->isAlert()) {
+       // set state to "alerting"
        this->currentlyAlerting = true;
-       for (std::vector<int>::iterator it = this->alertLeds.begin(); it != this->alertLeds.end(); ++it) {
-          this->ring.setPixelColor(*it, alertColor[0], alertColor[1], alertColor[2]);
+
+       // set all alerting leds to the alert color
+       for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
+          setPixelColor(*it, alertColor[0], alertColor[1], alertColor[2]);
        }
       } else {
+        // alert threshold not crossed,
+        //  now check if we were alerting @ the past tick
         if (currentlyAlerting) {
+          // yes.. so we dont need to alert any more, set state to NOT alerting
           this->currentlyAlerting = false;
-          for (std::vector<int>::iterator it = this->alertLeds.begin(); it != this->alertLeds.end(); ++it) {
-            this->ring.setPixelColor(*it, 0, 0, 0);
+          
+          // turn off all alert leds
+          for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
+            setPixelColor(*it, 0, 0, 0);
           }
         }
       }
-      this->ring.show();
+
+      // display all
+      show();
     }
 };
 
 
-// definition of a gauge container for our elements
+// definition of a global gauge container for our elements
 CompositeGauge gauge;
 
 
-void setup() {
+// define some variables that we'll later reuse to describe our ring
+// ... these leds are available for display of regular level
+vector<int> sweepLeds = {15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7};
+// ... these leds are alert leds
+vector<int> alertLeds = {8,9,10,11,12,13,14};
+// ... this is the RGB color of the alert leds
+int alertColor[3] = {255,0,0};
+// ... this is the RGB color of the level display leds
+int sweepColor[3] = {25,8,0};
 
+void setup() {
 
   Serial.begin(9600);
 
   // gauge assembly time =====================
 
   // Boost gauge with OLED and Ring ====
-
+  
   // definition of the type of sensor
   MPX4250_Sensor sensor(0, 0.1);
   
-  // add the sensor to the geuge
+  // add the sensor to the gauge
   gauge.add(&sensor);
 
-  // definition of the ring
-  // ... these leds are available for display of regular level
-  int sweepLeds[] = {15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7};
-  // ... these leds are alert leds
-  int alertLeds[] = {8,9,10,11,12,13,14};
-  // ... this is the RGB color of the alert leds
-  int alertColor[] = {255,0,0};
-  // ... this is the RGB color of the level display leds
-  int sweepColor[] = {255,80,0};
+  // definition of the outer light ring
+  NeoPixelRing ring(
+      &sensor,    // sensor
+      6,          // data pin
+      24,         // total number of leds in the ring
+      175,        // minimum displayed level
+      410,        // maximum displayed level
+      400,        // alert level
+      sweepColor, // color of the sweep leds
+      alertColor, // color of the alert leds
+      &sweepLeds, // ids of the sweep leds
+      &alertLeds  // ids of the alert leds
+  );
 
   // add the ring to the gauge
-  gauge.add(new NeoPixelRing(sensor, 6, 175, 410, 400, sweepColor, alertColor, sweepLeds, alertLeds, 24));
-
+  gauge.add(&ring);
+  
   // todo: add the oled screen
-  //gauge.add(&screen);
-
+  // gauge.add(&screen);
   // ===================================
 
   // =========================================
 }
 
 void loop() {
-  Serial.write("tick\n");
- 
   // tick, like in a clock, not like the insect
   gauge.tick();
 
-  delay(500);
-  
+  delay(100);
 }
