@@ -1,65 +1,114 @@
 #include <Adafruit_NeoPixel.h>
 #include <ArduinoSTL.h>
 
+#include <Wire.h>
+#include <SSD1306Ascii.h>
+#include <SSD1306AsciiWire.h>
+
 using namespace std;
 
-// analog sensor abstract?
+
+/**
+ * Abstract Analog Sensor 
+ */
 class AnalogSensor {
     protected:
-        int analogPin;
+        char analogPin;
         int measurement;
         void read () {
             measurement = analogRead(this->analogPin);
         }
     public:
-        static const int V_RESOLUTION = 5/1023;
-        AnalogSensor (int pin) {
+        static const unsigned char V_RESOLUTION_INV = 204; // (1023 / 5)
+        AnalogSensor (char pin) {
             this->analogPin = pin;
         }
         int raw(void) {
             return this->measurement;
         }
+        virtual String format() = 0;
+        virtual String unit() = 0;
 };
 
-class PressureSensor : public AnalogSensor {
+
+/**
+ * Abstract PressureSensor
+ * 
+ * Holds physics constants for pressure
+ */
+class PressureSensor {
   public:
-    static const float ONE_ATM_KPA = 101.325;
-    static const float ONE_ATM_PSI = 14.6959;
-    PressureSensor(int pin) : AnalogSensor(pin) {}
+    // divide these 2 by 10
+    static const unsigned short ONE_ATM_KPA = 1013;
+    static const unsigned char ONE_ATM_PSI = 147;
 };
 
-// gauge component interface?
+
+/**
+ * GaugeComponent Interface
+ * 
+ * Defines the contract for composable gauge components
+ */
 class GaugeComponent{
     public:
       virtual void tick(void) = 0;
       virtual void init(void) = 0;
 };
 
-// concretion of an analog sensor that is a gauge component,
-//  specifically modelled after the MPX4250AP sensor
-//  todo: send physics constants to abstract class for a "pressure/boost" sensor
-class MPX4250_Sensor : public PressureSensor, public GaugeComponent {
+
+/**
+ * MPX4250AP sensor
+ * 
+ * An analog pressure sensor, which can be composable into a gauge
+ */
+class MPX4250_Sensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
     protected:
-        float degradation;
+        char percentDegradation;
         
         float toKpaAbs() {
-            return this->measurement * (AnalogSensor::V_RESOLUTION) / MPX4250_Sensor::SENSOR_KPA_PER_V * (1 + this->degradation);
+            return (float)this->measurement / 
+            ((float)AnalogSensor::V_RESOLUTION_INV) / 
+            ((float)MPX4250_Sensor::mV_PER_KPA / 1000) * 
+            (1 + ((float)this->percentDegradation / 100));
         }
         
         float toKpaRel() {
-            return this->toKpaAbs() - PressureSensor::ONE_ATM_KPA;
+            return toKpaAbs() - ((float)PressureSensor::ONE_ATM_KPA / 10);
         }
         
         float toPsiRel() {
-            return this->toKpaRel() / PressureSensor::ONE_ATM_KPA * PressureSensor::ONE_ATM_PSI;
+            return 
+              this->toKpaRel() * 
+              ((float)PressureSensor::ONE_ATM_PSI/10) / 
+              ((float)PressureSensor::ONE_ATM_KPA/10) ;
         }
+
     public:
-        static const float SENSOR_KPA_PER_V = 0.02;
+        static const unsigned char mV_PER_KPA = 20;
         
-        MPX4250_Sensor (int pin, float degradation = 0) : PressureSensor(pin), GaugeComponent() {
-            this->degradation = degradation;
+        MPX4250_Sensor (char pin, char percentDegradation = 0) : 
+          AnalogSensor(pin), 
+          GaugeComponent() 
+        {
+            this->percentDegradation = percentDegradation;
+        }
+
+        String format(){
+          float level = toPsiRel();
+          String concat = "";
+          if (level > 0) {
+            concat = " ";
+          }
+          if (level > 10) {
+            concat += " ";
+          }
+          return concat + level;
         }
         
+        String unit(){
+          return "psi";
+        }
+
         void tick(void) {
             this->read();
         }
@@ -67,8 +116,15 @@ class MPX4250_Sensor : public PressureSensor, public GaugeComponent {
         void init(void) {}
 };
 
-// gauge container that accepts multiple "GaugeComponent" elements
-//  which we are going to iterate and "tick"
+
+/**
+ * CompositeGauge
+ * 
+ * A container that takes GaugeComponents, inits them and 
+ *  calls tick() on each one at each loop iteration
+ *  
+ * Always add the sensors before any other component
+ */
 class CompositeGauge{
   vector<GaugeComponent*> components;
   public:
@@ -95,9 +151,17 @@ class CompositeGauge{
     }
 };
 
-// a ring of rgb leds, that is aware of an analog sensor measurement, and
-//  illuminates the a certain amount of leds, based on its min and max levels
-//  additionally has "alert leds" which are activated when alertLevel is reached
+
+/**
+ * NeoPixelRing
+ * 
+ * @todo: split this into an abstract NeoPixelRing class and below's task
+ * @todo: rename this to SingleSensorAlertingRing
+ * 
+ * A ring of rgb leds that is aware of an analog sensor measurement, and
+ *  illuminates the a certain amount of leds, based on its min and max levels
+ *  additionally has "alert leds" which are activated when alertLevel is reached
+ */
 class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
   protected:
     AnalogSensor *sensor;
@@ -110,8 +174,7 @@ class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
     int alertLevel = 2;
     int *baseColor;
     int *alertColor;
-    bool inited = false;
-    
+        
     NeoPixelRing(
       AnalogSensor *sensor,
       uint16_t dataPin,
@@ -192,12 +255,69 @@ class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
 };
 
 
-// definition of a global gauge container for our elements
+/**
+ * Screen
+ * 
+ * @todo: extract this to Abstract Screen AND SingleSensorAsciiScreen
+ * 
+ * An AnalogSensor aware screen, with positionable measurement and unit
+ */
+class Screen : public GaugeComponent, public SSD1306AsciiWire {
+    unsigned char address;
+    AnalogSensor *sensor;
+    unsigned char measurementX;
+    unsigned char measurementY;
+    unsigned char unitX;
+    unsigned char unitY;
+  public:
+    Screen(
+      unsigned char address,
+      AnalogSensor *sensor,
+      unsigned char measurementX = 0,
+      unsigned char measurementY = 0,
+      unsigned char unitY = 0
+    ) :
+    SSD1306AsciiWire() {
+      this->address = address;
+      this->sensor = sensor;
+      this->measurementX = measurementX;
+      this->measurementY = measurementY;
+      this->unitY = unitY;
+      Wire.begin();
+    }
+
+    void init(void){
+      begin(&Adafruit128x64, this->address);
+      setFont(System5x7);
+      set2X();
+      clear();
+    }
+    
+    void tick(void) {
+      setCol(this->measurementX);
+      setRow(this->measurementY);
+      print(this->sensor->format());
+      set1X();
+      setRow(this->unitY);
+      print(this->sensor->unit());
+      set2X();
+      home();
+    }
+};
+
+
+
+/* ***************************
+ *  
+ *  Runtime starts setup Here
+ *  
+ ***************************** */
+
+// instantiate gauge container
 CompositeGauge gauge;
 
-
-// definition of the type of sensor
-MPX4250_Sensor sensor(0, 0.1);
+// instantiate shared sensor
+MPX4250_Sensor sensor(0, 10);
 
 
 // define some variables that we'll later reuse to describe our ring
@@ -210,7 +330,7 @@ int alertColor[3] = {255,0,0};
 // ... this is the RGB color of the level display leds
 int sweepColor[3] = {25,8,0};
 
-// definition of the outer light ring
+// instantiate light ring
 NeoPixelRing ring(
     &sensor,    // sensor
     6,          // data pin
@@ -224,12 +344,15 @@ NeoPixelRing ring(
     &alertLeds  // ids of the alert leds
 );
 
+// instantiate gauge screen
+Screen screen(0x3D, &sensor, 28, 3, 4);
+
 
 void setup() {
-  
+
   // gauge assembly time =====================
 
-    // Boost gauge with OLED and Ring ====
+    // Single Sensor, Boost gauge with alert, OLED and Ring ====
     
       // add the sensor to the gauge
       gauge.add(&sensor);
@@ -237,11 +360,8 @@ void setup() {
       // add the ring to the gauge
       gauge.add(&ring);
       
-      // todo: add the oled screen
-      // gauge.add(&screen);
-    
-      // initiation routine
-      gauge.init();
+      // add the oled screen
+      gauge.add(&screen);
       
       // ===================================
 
