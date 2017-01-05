@@ -7,27 +7,35 @@
 
 using namespace std;
 
+/**
+ * Interface of a sensor
+ */
+class Sensor{
+  public:
+    virtual String format(void) = 0;
+    virtual String unit(void) = 0;
+    virtual int raw(void) = 0;
+};
+
 
 /**
  * Abstract Analog Sensor 
  */
-class AnalogSensor {
-    protected:
-        char analogPin;
-        int measurement;
-        void read () {
-            measurement = analogRead(this->analogPin);
-        }
-    public:
-        static const unsigned char V_RESOLUTION_INV = 204; // (1023 / 5)
-        AnalogSensor (char pin) {
-            this->analogPin = pin;
-        }
-        int raw(void) {
-            return this->measurement;
-        }
-        virtual String format() = 0;
-        virtual String unit() = 0;
+class AnalogSensor : public Sensor {
+  protected:
+    char analogPin;
+    word measurement;
+    void read () {
+        measurement = analogRead(this->analogPin);
+    }
+  public:
+    static const byte V_RESOLUTION_INV = 204; // (1023 / 5)
+    AnalogSensor (char pin) : Sensor() {
+        this->analogPin = pin;
+    }
+    int raw(void) {
+        return this->measurement;
+    }
 };
 
 
@@ -39,8 +47,8 @@ class AnalogSensor {
 class PressureSensor {
   public:
     // divide these 2 by 10
-    static const unsigned short ONE_ATM_KPA = 1013;
-    static const unsigned char ONE_ATM_PSI = 147;
+    static const word ONE_ATM_KPA = 1013;
+    static const byte ONE_ATM_PSI = 147;
 };
 
 
@@ -50,9 +58,64 @@ class PressureSensor {
  * Defines the contract for composable gauge components
  */
 class GaugeComponent{
-    public:
-      virtual void tick(void) = 0;
-      virtual void init(void) = 0;
+  public:
+    virtual void tick(void) = 0;
+    virtual void init(void) = 0;
+};
+
+
+/**
+ * Test sensor that goes up to 'maxLevel' then switches direction until it reaches 'minLevel'
+ *  then back up again, at a rate of 'speed' per tick
+ *  
+ *  Useful to simulate sensors with software only ;)
+ */
+class TestSensor : public Sensor, public GaugeComponent{
+  boolean direction = 1; // 1 up; 0 down;
+  word measurement = 0;
+  word minLevel;
+  word maxLevel;
+  byte speed;
+  public:
+    TestSensor(
+      word minLevel,
+      word maxLevel,
+      byte speed
+    ) : Sensor(), GaugeComponent(){
+      this->minLevel = minLevel;
+      this->maxLevel = maxLevel;
+      this->speed = speed;
+    }
+    
+    void tick(void){
+      if (this->measurement > (this->maxLevel - this->speed) && this->direction == 1) {
+        this->direction = 0;
+      }
+      
+      if (this->measurement < (this->minLevel + this->speed) && this->direction == 0) {
+        this->direction = 1;
+      }
+      
+      if (this->direction == 1) {
+        this->measurement += this->speed;
+      } else {
+        this->measurement -= this->speed;
+      }
+    }
+    
+    void init(void){}
+    
+    String format(void){
+      String concat = " ";
+      return concat + (float)measurement / 10;
+    };
+    
+    String unit(void){
+      return "unit";
+    };
+    int raw(void){
+      return measurement;  
+    };
 };
 
 
@@ -61,59 +124,59 @@ class GaugeComponent{
  * 
  * An analog pressure sensor, which can be composable into a gauge
  */
-class MPX4250_Sensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
-    protected:
-        char percentDegradation;
-        
-        float toKpaAbs() {
-            return (float)this->measurement / 
-            ((float)AnalogSensor::V_RESOLUTION_INV) / 
-            ((float)MPX4250_Sensor::mV_PER_KPA / 1000) * 
-            (1 + ((float)this->percentDegradation / 100));
-        }
-        
-        float toKpaRel() {
-            return toKpaAbs() - ((float)PressureSensor::ONE_ATM_KPA / 10);
-        }
-        
-        float toPsiRel() {
-            return 
-              this->toKpaRel() * 
-              ((float)PressureSensor::ONE_ATM_PSI/10) / 
-              ((float)PressureSensor::ONE_ATM_KPA/10) ;
-        }
+class MPX4250Sensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
+  protected:
+    char percentDegradation;
+    
+    float toKpaAbs() {
+      return (float)this->measurement / 
+        ((float)AnalogSensor::V_RESOLUTION_INV) / 
+        ((float)MPX4250Sensor::mV_PER_KPA / 1000) * 
+        (1 + ((float)this->percentDegradation / 100));
+    }
+    
+    float toKpaRel() {
+      return toKpaAbs() - ((float)PressureSensor::ONE_ATM_KPA / 10);
+    }
+    
+    float toPsiRel() {
+      return 
+        this->toKpaRel() * 
+        ((float)PressureSensor::ONE_ATM_PSI/10) / 
+        ((float)PressureSensor::ONE_ATM_KPA/10) ;
+    }
 
-    public:
-        static const unsigned char mV_PER_KPA = 20;
-        
-        MPX4250_Sensor (char pin, char percentDegradation = 0) : 
-          AnalogSensor(pin), 
-          GaugeComponent() 
-        {
-            this->percentDegradation = percentDegradation;
-        }
+  public:
+    static const byte mV_PER_KPA = 20;
+    
+    MPX4250Sensor (char pin, char percentDegradation = 0) : 
+      AnalogSensor(pin), 
+      GaugeComponent() 
+    {
+      this->percentDegradation = percentDegradation;
+    }
 
-        String format(){
-          float level = toPsiRel();
-          String concat = "";
-          if (level > 0) {
-            concat = " ";
-          }
-          if (level > 10) {
-            concat += " ";
-          }
-          return concat + level;
-        }
-        
-        String unit(){
-          return "psi";
-        }
+    String format(void){
+      float level = toPsiRel();
+      String concat = "";
+      if (level > 0) {
+        concat = " ";
+      }
+      if (level > 10) {
+        concat += " ";
+      }
+      return concat + level;
+    }
+    
+    String unit(void){
+      return "psi";
+    }
 
-        void tick(void) {
-            this->read();
-        }
+    void tick(void) {
+      this->read();
+    }
 
-        void init(void) {}
+    void init(void) {}
 };
 
 
@@ -140,9 +203,9 @@ class CompositeGauge{
     void tick(void) {
       vector<GaugeComponent*>::iterator it;
       for (
-          it = this->components.begin();
-          it != this->components.end();
-          ++it
+        it = this->components.begin();
+        it != this->components.end();
+        ++it
         ) {
          
         (*it)->tick();
@@ -164,7 +227,7 @@ class CompositeGauge{
  */
 class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
   protected:
-    AnalogSensor *sensor;
+    Sensor *sensor;
     bool currentlyAlerting = false;
   public:
     vector<int> *sweepLeds;
@@ -176,7 +239,7 @@ class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
     int *alertColor;
         
     NeoPixelRing(
-      AnalogSensor *sensor,
+      Sensor *sensor,
       uint16_t dataPin,
       uint8_t totalLeds,
       int minLevel,
@@ -263,19 +326,19 @@ class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
  * An AnalogSensor aware screen, with positionable measurement and unit
  */
 class Screen : public GaugeComponent, public SSD1306AsciiWire {
-    unsigned char address;
-    AnalogSensor *sensor;
-    unsigned char measurementX;
-    unsigned char measurementY;
-    unsigned char unitX;
-    unsigned char unitY;
+    byte address;
+    Sensor *sensor;
+    byte measurementX;
+    byte measurementY;
+    byte unitX;
+    byte unitY;
   public:
     Screen(
-      unsigned char address,
-      AnalogSensor *sensor,
-      unsigned char measurementX = 0,
-      unsigned char measurementY = 0,
-      unsigned char unitY = 0
+      byte address,
+      Sensor *sensor,
+      byte measurementX = 0,
+      byte measurementY = 0,
+      byte unitY = 0
     ) :
     SSD1306AsciiWire() {
       this->address = address;
@@ -317,8 +380,8 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
 CompositeGauge gauge;
 
 // instantiate shared sensor
-MPX4250_Sensor sensor(0, 10);
-
+//MPX4250Sensor sensor(0, 10);
+TestSensor sensor(175,440,10);
 
 // define some variables that we'll later reuse to describe our ring
 // ... these leds are available for display of regular level
