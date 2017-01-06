@@ -85,10 +85,11 @@ class TestSensor : public Sensor, public GaugeComponent{
       this->minLevel = minLevel;
       this->maxLevel = maxLevel;
       this->speed = speed;
+      this->measurement = minLevel;
     }
     
     void tick(void){
-      if (this->measurement > (this->maxLevel - this->speed) && this->direction == 1) {
+      if (this->measurement > this->maxLevel && this->direction == 1) {
         this->direction = 0;
       }
       
@@ -216,16 +217,13 @@ class CompositeGauge{
 
 
 /**
- * NeoPixelRing
+ * Individually Addressable LED Strip Sweep
  * 
- * @todo: split this into an abstract NeoPixelRing class and below's task
- * @todo: rename this to SingleSensorAlertingRing
- * 
- * A ring of rgb leds that is aware of an analog sensor measurement, and
- *  illuminates the a certain amount of leds, based on its min and max levels
- *  additionally has "alert leds" which are activated when alertLevel is reached
+ * Component that defines and operates the sweep of an LED Strip
+ *  upon update call, the instance of the LED Strip that needs to
+ *  contain this sweep needs to be passed
  */
-class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
+class IndAddrLEDStripSweep {
   protected:
     Sensor *sensor;
     bool currentlyAlerting = false;
@@ -237,8 +235,81 @@ class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
     int alertLevel = 2;
     int *baseColor;
     int *alertColor;
-        
-    NeoPixelRing(
+    IndAddrLEDStripSweep(
+      Sensor *sensor,
+      int minLevel,
+      int maxLevel,
+      int alertLevel,
+      int baseColor[3],
+      int alertColor[3],
+      vector<int> *sweepLeds,
+      vector<int> *alertLeds
+      ) {
+        this->sensor = sensor;
+        this->minLevel = minLevel;
+        this->maxLevel = maxLevel;
+        this->alertLevel = alertLevel;
+        this->baseColor = baseColor;
+        this->alertColor = alertColor;
+        this->sweepLeds = sweepLeds;
+        this->alertLeds = alertLeds;
+      }
+
+    void update(Adafruit_NeoPixel *ledStrip) {
+      // calculate how many leds should be lit, by calculating the ranges
+      int relativeLevel = sensor->raw() - this->minLevel;
+      int sweepRange = this->maxLevel - this->minLevel;
+      float percentileLevel = relativeLevel / (float)sweepRange;
+      int howManyLeds = percentileLevel * this->sweepLeds->size() - 1;
+
+      int ledKey = 0;
+      for (vector<int>::iterator it = this->sweepLeds->begin(); it != this->sweepLeds->end(); ++it) {
+        if (ledKey < howManyLeds) {
+          ledStrip->setPixelColor(*it, this->baseColor[0], this->baseColor[1], this->baseColor[2]);
+        } else {
+          ledStrip->setPixelColor(*it, 0, 0, 0);
+        }
+        ledKey++;
+      }
+
+      // check if new reading triggered alert
+      if (this->isAlert()) {
+       // set state to "alerting"
+       this->currentlyAlerting = true;
+
+       // set all alerting leds to the alert color
+       for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
+          ledStrip->setPixelColor(*it, alertColor[0], alertColor[1], alertColor[2]);
+       }
+      } else {
+        // alert threshold not crossed,
+        //  now check if we were alerting @ the past tick
+        if (currentlyAlerting) {
+          // yes.. so we dont need to alert any more, set state to NOT alerting
+          this->currentlyAlerting = false;
+          
+          // turn off all alert leds
+          for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
+            ledStrip->setPixelColor(*it, 0, 0, 0);
+          }
+        }
+      }
+    }
+
+    bool isAlert() {
+      return sensor->raw() > this->alertLevel;
+    }
+};
+
+/**
+ * Single Sweep, single sensor LED Strip (aka LED Ring)
+ */
+class SingleSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
+  protected:
+    Sensor *sensor;
+    IndAddrLEDStripSweep *sweep;
+  public: 
+    SingleSweepLEDStrip(
       Sensor *sensor,
       uint16_t dataPin,
       uint8_t totalLeds,
@@ -252,67 +323,57 @@ class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
       ) : GaugeComponent(),
           Adafruit_NeoPixel(totalLeds, dataPin, NEO_GRB + NEO_KHZ800)
        {
-        this->sensor = sensor;
-        this->minLevel = minLevel;
-        this->maxLevel = maxLevel;
-        this->alertLevel = alertLevel;
-        this->baseColor = baseColor;
-        this->alertColor = alertColor;
-        this->sweepLeds = sweepLeds;
-        this->alertLeds = alertLeds;
-    }
+        this->sweep = new IndAddrLEDStripSweep(
+          sensor,
+          minLevel,
+          maxLevel,
+          alertLevel,
+          baseColor,
+          alertColor,
+          sweepLeds,
+          alertLeds
+        );
+       }
 
     void init(void) {
         begin();
-        show();  
-    }
-
-    bool isAlert() {
-      return sensor->raw() > this->alertLevel;
+        show();
     }
     
     void tick(void) {
-      
-      // calculate how many leds should be lit, by calculating the ranges
-      int relativeLevel = sensor->raw() - this->minLevel;
-      int sweepRange = this->maxLevel - this->minLevel;
-      float percentileLevel = relativeLevel / (float)sweepRange;
-      int howManyLeds = percentileLevel * this->sweepLeds->size() - 1;
-      
-      int ledKey = 0;
-      for (vector<int>::iterator it = this->sweepLeds->begin(); it != this->sweepLeds->end(); ++it) {
-        if (ledKey < howManyLeds) {
-          setPixelColor(*it, baseColor[0], baseColor[1], baseColor[2]);
-        } else {
-          setPixelColor(*it, 0, 0, 0);
-        }
-        ledKey++;
-      }
+      this->sweep->update(this);
+      show();
+    }
+};
 
-      // check if new reading triggered alert
-      if (this->isAlert()) {
-       // set state to "alerting"
-       this->currentlyAlerting = true;
-
-       // set all alerting leds to the alert color
-       for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
-          setPixelColor(*it, alertColor[0], alertColor[1], alertColor[2]);
+/**
+ * Dual Sweep, Dual Sensor LED Strip (aka LED Ring)
+ */
+class DualSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
+  protected:
+    IndAddrLEDStripSweep *sweep1;
+    IndAddrLEDStripSweep *sweep2;
+  public: 
+    DualSweepLEDStrip(
+      IndAddrLEDStripSweep *sweep1,
+      IndAddrLEDStripSweep *sweep2,
+      uint16_t dataPin,
+      uint8_t totalLeds
+      ) : GaugeComponent(),
+          Adafruit_NeoPixel(totalLeds, dataPin, NEO_GRB + NEO_KHZ800)
+       {
+        this->sweep1 = sweep1;
+        this->sweep2 = sweep2;
        }
-      } else {
-        // alert threshold not crossed,
-        //  now check if we were alerting @ the past tick
-        if (currentlyAlerting) {
-          // yes.. so we dont need to alert any more, set state to NOT alerting
-          this->currentlyAlerting = false;
-          
-          // turn off all alert leds
-          for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
-            setPixelColor(*it, 0, 0, 0);
-          }
-        }
-      }
 
-      // display all
+    void init(void) {
+        begin();
+        show();
+    }
+    
+    void tick(void) {
+      this->sweep1->update(this);
+      this->sweep2->update(this);
       show();
     }
 };
@@ -328,6 +389,7 @@ class NeoPixelRing : public GaugeComponent, public Adafruit_NeoPixel {
 class Screen : public GaugeComponent, public SSD1306AsciiWire {
     byte address;
     Sensor *sensor;
+    byte resetPin;
     byte measurementX;
     byte measurementY;
     byte unitX;
@@ -336,6 +398,7 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
     Screen(
       byte address,
       Sensor *sensor,
+      byte resetPin = 4,
       byte measurementX = 0,
       byte measurementY = 0,
       byte unitY = 0
@@ -343,17 +406,19 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
     SSD1306AsciiWire() {
       this->address = address;
       this->sensor = sensor;
+      this->resetPin = resetPin;
       this->measurementX = measurementX;
       this->measurementY = measurementY;
       this->unitY = unitY;
       Wire.begin();
     }
 
-    void init(void){
+    void init(void){      
+      SSD1306Ascii::reset(this->resetPin);
       begin(&Adafruit128x64, this->address);
+      clear();
       setFont(System5x7);
       set2X();
-      clear();
     }
     
     void tick(void) {
@@ -380,9 +445,11 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
 CompositeGauge gauge;
 
 // instantiate shared sensor
-//MPX4250Sensor sensor(0, 10);
-TestSensor sensor(175,440,10);
+//MPX4250Sensor sensor1(0, 10);
+TestSensor sensor2(175,440,20);
 
+
+/*
 // define some variables that we'll later reuse to describe our ring
 // ... these leds are available for display of regular level
 vector<int> sweepLeds = {15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7};
@@ -394,7 +461,8 @@ int alertColor[3] = {255,0,0};
 int sweepColor[3] = {25,8,0};
 
 // instantiate light ring
-NeoPixelRing ring(
+//NeoPixelRing ring(
+SingleSweepLEDStrip ring(
     &sensor,    // sensor
     6,          // data pin
     24,         // total number of leds in the ring
@@ -406,19 +474,55 @@ NeoPixelRing ring(
     &sweepLeds, // ids of the sweep leds
     &alertLeds  // ids of the alert leds
 );
+*/
+
+//top: 16,17,18,19,20,21,22,23,0,1,2,3
+//bot: 15,14,13,12,11,10,9,8,7,6,5,4
+vector<int> sweepLeds1 = {17,18,19,20,21,22,23,0,1,2,3};
+vector<int> alertLeds1 = {4};
+vector<int> sweepLeds2 = {16,15,14,13,12,11,10,9,8,7,6};
+vector<int> alertLeds2 = {5};
+
+// ... this is the RGB color of the alert leds
+int alertColor[3] = {255,0,0};
+// ... this is the RGB color of the level display leds
+int sweepColor1[3] = {25,8,0};
+int sweepColor2[3] = {0,8,25};
+
+IndAddrLEDStripSweep sweep1(
+  &sensor2,
+  175,
+  410,
+  400,
+  sweepColor1,
+  alertColor,
+  &sweepLeds1,
+  &alertLeds1
+);
+IndAddrLEDStripSweep sweep2(
+  &sensor2,
+  175,
+  410,
+  400,
+  sweepColor2,
+  alertColor,
+  &sweepLeds2,
+  &alertLeds2
+);
+DualSweepLEDStrip ring(&sweep1, &sweep2, 6, 24);
 
 // instantiate gauge screen
-Screen screen(0x3D, &sensor, 28, 3, 4);
+Screen screen(0x3D, &sensor2, 4, 28, 3, 4);
 
 
 void setup() {
-
   // gauge assembly time =====================
 
     // Single Sensor, Boost gauge with alert, OLED and Ring ====
     
-      // add the sensor to the gauge
-      gauge.add(&sensor);
+      // add the sensor2 to the gauge
+      //gauge.add(&sensor1);
+      gauge.add(&sensor2);
     
       // add the ring to the gauge
       gauge.add(&ring);
