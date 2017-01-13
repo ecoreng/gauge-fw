@@ -107,8 +107,10 @@ class TestSensor : public Sensor, public GaugeComponent{
     void init(void){}
     
     String format(void){
-      String concat = " ";
-      return concat + (float)measurement / 10;
+      float adjusted = ((float)measurement / 10 - 50);
+      char charBuf[10];
+      String formatted = dtostrf(adjusted, 5, 1, charBuf);     
+      return formatted;
     };
     
     String unit(void){
@@ -159,14 +161,9 @@ class MPX4250Sensor : public PressureSensor, public AnalogSensor, public GaugeCo
 
     String format(void){
       float level = toPsiRel();
-      String concat = "";
-      if (level > 0) {
-        concat = " ";
-      }
-      if (level > 10) {
-        concat += " ";
-      }
-      return concat + level;
+      char charBuf[10];
+      String formatted = dtostrf(level, 5, 1, charBuf);     
+      return formatted;
     }
     
     String unit(void){
@@ -215,9 +212,76 @@ class CompositeGauge{
     }
 };
 
+/**
+ * Illumination Strategy Interface
+ * 
+ * Useful because you might want to display the level in different ways
+ */
+class IlluminationStrategy {
+  public:
+    virtual int *getIlluminationColor(int currentLed, int level, int *baseColor, int *blankColor) = 0;
+};
 
 /**
- * Individually Addressable LED Strip Sweep
+ * Illuminates all LEDs from the left up to the level indicator
+ */
+class FullSweepIlluminationStrategy : public IlluminationStrategy {
+  public:
+    FullSweepIlluminationStrategy() : IlluminationStrategy() {}
+    
+    int *getIlluminationColor(int currentLed, int level, int *baseColor, int *blankColor) {
+      return currentLed <= level ? baseColor : blankColor;
+    }
+};
+
+/**
+ * Illuminates all LEDs from the level indicator all the way to the right
+ */
+class InverseFullSweepIlluminationStrategy : public IlluminationStrategy {
+  public:
+    InverseFullSweepIlluminationStrategy() : IlluminationStrategy() {}
+    
+    int *getIlluminationColor(int currentLed, int level, int *baseColor, int *blankColor) {
+      return currentLed >= level ? baseColor : blankColor;
+    }
+};
+
+/**
+ * Illuminates only the level LED and `radio` LEDs before and after that
+ */
+class LevelOnlyIlluminationStrategy : public IlluminationStrategy {
+  protected:
+    int radio;
+  public:
+    LevelOnlyIlluminationStrategy(
+      int radio
+    ) : IlluminationStrategy() {
+      this->radio = radio;
+    }
+    
+    int *getIlluminationColor(int currentLed, int level, int *baseColor, int *blankColor) {      
+      if (currentLed == level) {
+        return baseColor;
+      }
+      
+      if (currentLed >= (level - radio) && currentLed <= (level + radio)) {
+        int adjustedIColor[] = {baseColor[0] / 3, baseColor[1] / 3, baseColor[2] / 3};
+
+        // for some reason this needs to be here
+        //  to return the right color for all instances
+        delay(0);
+        
+        return adjustedIColor;
+      }
+      
+      return blankColor;
+    }
+};
+ 
+
+
+/**
+ * Individually Addressable LED Strip SWEEP
  * 
  * Component that defines and operates the sweep of an LED Strip
  *  upon update call, the instance of the LED Strip that needs to
@@ -227,6 +291,7 @@ class IndAddrLEDStripSweep {
   protected:
     Sensor *sensor;
     bool currentlyAlerting = false;
+    IlluminationStrategy *strategy;
   public:
     vector<int> *sweepLeds;
     vector<int> *alertLeds;
@@ -235,6 +300,7 @@ class IndAddrLEDStripSweep {
     int alertLevel = 2;
     int *baseColor;
     int *alertColor;
+    int *blankColor;
     IndAddrLEDStripSweep(
       Sensor *sensor,
       int minLevel,
@@ -242,17 +308,23 @@ class IndAddrLEDStripSweep {
       int alertLevel,
       int baseColor[3],
       int alertColor[3],
+      int blankColor[3],
       vector<int> *sweepLeds,
-      vector<int> *alertLeds
+      vector<int> *alertLeds,
+      IlluminationStrategy *strategy
       ) {
         this->sensor = sensor;
         this->minLevel = minLevel;
         this->maxLevel = maxLevel;
         this->alertLevel = alertLevel;
+
         this->baseColor = baseColor;
         this->alertColor = alertColor;
+        this->blankColor = blankColor;
+        
         this->sweepLeds = sweepLeds;
         this->alertLeds = alertLeds;
+        this->strategy = strategy;
       }
 
     void update(Adafruit_NeoPixel *ledStrip) {
@@ -264,11 +336,8 @@ class IndAddrLEDStripSweep {
 
       int ledKey = 0;
       for (vector<int>::iterator it = this->sweepLeds->begin(); it != this->sweepLeds->end(); ++it) {
-        if (ledKey < howManyLeds) {
-          ledStrip->setPixelColor(*it, this->baseColor[0], this->baseColor[1], this->baseColor[2]);
-        } else {
-          ledStrip->setPixelColor(*it, 0, 0, 0);
-        }
+        int *color = this->strategy->getIlluminationColor(ledKey, howManyLeds, this->baseColor, this->blankColor);        
+        ledStrip->setPixelColor(*it, color[0], color[1], color[2]);
         ledKey++;
       }
 
@@ -317,6 +386,7 @@ class SingleSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
       int maxLevel,
       int alertLevel,
       int baseColor[3],
+      int blankColor[3],
       int alertColor[3],
       vector<int> *sweepLeds,
       vector<int> *alertLeds
@@ -329,9 +399,11 @@ class SingleSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
           maxLevel,
           alertLevel,
           baseColor,
+          blankColor,
           alertColor,
           sweepLeds,
-          alertLeds
+          alertLeds,
+          new FullSweepIlluminationStrategy()
         );
        }
 
@@ -379,6 +451,54 @@ class DualSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
 };
 
 
+class DualSensorScreen : public GaugeComponent, public SSD1306AsciiWire {
+  byte address;
+  Sensor *topSensor;
+  Sensor *bottomSensor;
+  byte resetPin;
+  byte measurementX;
+  byte screenHeight;
+  DevType *screenType;
+  DualSensorScreen(
+      byte address,
+      DevType *screenType,
+      Sensor *topSensor,
+      Sensor *bottomSensor,
+      byte resetPin = 4,
+      byte measurementX = 0,
+      byte screenHeight = 0
+    ) :
+    SSD1306AsciiWire() {
+      this->address = address;
+      this->topSensor = topSensor;
+      this->bottomSensor = bottomSensor;
+      this->resetPin = resetPin;
+      this->measurementX = measurementX;
+      this->screenType = screenType;
+      Wire.begin();
+    }
+
+    void init(void){
+      SSD1306Ascii::reset(this->resetPin);
+      begin(this->screenType, this->address);
+      clear();
+      setFont(X11fixed7x14B);
+      set2X();
+    }
+    
+    void tick(void) {
+      setCol(this->measurementX);
+      //setRow(this->measurementY);
+      print(this->topSensor->format());
+      set1X();
+      //setRow(this->unitY);
+      print(this->topSensor->unit());
+      set2X();
+      home();
+    }
+};
+
+
 /**
  * Screen
  * 
@@ -388,15 +508,16 @@ class DualSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
  */
 class Screen : public GaugeComponent, public SSD1306AsciiWire {
     byte address;
+    DevType *screenType;
     Sensor *sensor;
     byte resetPin;
     byte measurementX;
     byte measurementY;
-    byte unitX;
     byte unitY;
   public:
     Screen(
       byte address,
+      DevType *screenType,
       Sensor *sensor,
       byte resetPin = 4,
       byte measurementX = 0,
@@ -405,6 +526,7 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
     ) :
     SSD1306AsciiWire() {
       this->address = address;
+      this->screenType = screenType;
       this->sensor = sensor;
       this->resetPin = resetPin;
       this->measurementX = measurementX;
@@ -415,9 +537,9 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
 
     void init(void){      
       SSD1306Ascii::reset(this->resetPin);
-      begin(&Adafruit128x64, this->address);
+      begin(this->screenType, this->address);
       clear();
-      setFont(System5x7);
+      setFont(X11fixed7x14B);
       set2X();
     }
     
@@ -445,7 +567,7 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
 CompositeGauge gauge;
 
 // instantiate shared sensor
-//MPX4250Sensor sensor1(0, 10);
+//MPX4250Sensor sensor2(0, 10);
 TestSensor sensor2(175,440,20);
 
 
@@ -463,7 +585,7 @@ int sweepColor[3] = {25,8,0};
 // instantiate light ring
 //NeoPixelRing ring(
 SingleSweepLEDStrip ring(
-    &sensor,    // sensor
+    &sensor2,    // sensor
     6,          // data pin
     24,         // total number of leds in the ring
     175,        // minimum displayed level
@@ -476,8 +598,7 @@ SingleSweepLEDStrip ring(
 );
 */
 
-//top: 16,17,18,19,20,21,22,23,0,1,2,3
-//bot: 15,14,13,12,11,10,9,8,7,6,5,4
+
 vector<int> sweepLeds1 = {17,18,19,20,21,22,23,0,1,2,3};
 vector<int> alertLeds1 = {4};
 vector<int> sweepLeds2 = {16,15,14,13,12,11,10,9,8,7,6};
@@ -488,7 +609,11 @@ int alertColor[3] = {255,0,0};
 // ... this is the RGB color of the level display leds
 int sweepColor1[3] = {25,8,0};
 int sweepColor2[3] = {0,8,25};
+int blankColor[3] = {0,0,0};
 
+LevelOnlyIlluminationStrategy illumination(0);
+//FullSweepIlluminationStrategy illumination;
+//InverseFullSweepIlluminationStrategy illumination;
 IndAddrLEDStripSweep sweep1(
   &sensor2,
   175,
@@ -496,8 +621,10 @@ IndAddrLEDStripSweep sweep1(
   400,
   sweepColor1,
   alertColor,
+  blankColor,
   &sweepLeds1,
-  &alertLeds1
+  &alertLeds1,
+  &illumination
 );
 IndAddrLEDStripSweep sweep2(
   &sensor2,
@@ -506,13 +633,16 @@ IndAddrLEDStripSweep sweep2(
   400,
   sweepColor2,
   alertColor,
+  blankColor,
   &sweepLeds2,
-  &alertLeds2
+  &alertLeds2,
+  &illumination
 );
 DualSweepLEDStrip ring(&sweep1, &sweep2, 6, 24);
 
+
 // instantiate gauge screen
-Screen screen(0x3D, &sensor2, 4, 28, 3, 4);
+Screen screen(0x3D, &Adafruit128x64, &sensor2, 4, 15, 3, 4);
 
 
 void setup() {
