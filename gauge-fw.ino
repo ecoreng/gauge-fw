@@ -452,21 +452,22 @@ class DualSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
 
 
 class DualSensorScreen : public GaugeComponent, public SSD1306AsciiWire {
-  byte address;
-  Sensor *topSensor;
-  Sensor *bottomSensor;
-  byte resetPin;
-  byte measurementX;
-  byte screenHeight;
-  DevType *screenType;
-  DualSensorScreen(
+    byte address;
+    Sensor *topSensor;
+    Sensor *bottomSensor;
+    byte resetPin;
+    byte measurementX;
+    DevType *screenType;
+    byte topSensorY;
+    byte bottomSensorY;
+  public:
+    DualSensorScreen(
       byte address,
       DevType *screenType,
       Sensor *topSensor,
       Sensor *bottomSensor,
       byte resetPin = 4,
-      byte measurementX = 0,
-      byte screenHeight = 0
+      byte measurementX = 0
     ) :
     SSD1306AsciiWire() {
       this->address = address;
@@ -475,6 +476,8 @@ class DualSensorScreen : public GaugeComponent, public SSD1306AsciiWire {
       this->resetPin = resetPin;
       this->measurementX = measurementX;
       this->screenType = screenType;
+      this->topSensorY = (((float)this->screenType->lcdHeight / 3) - 20) / 7;
+      this->bottomSensorY = (((float)this->screenType->lcdHeight * 2 / 3) - 8 ) / 7;
       Wire.begin();
     }
 
@@ -488,13 +491,20 @@ class DualSensorScreen : public GaugeComponent, public SSD1306AsciiWire {
     
     void tick(void) {
       setCol(this->measurementX);
-      //setRow(this->measurementY);
+      setRow(this->topSensorY);
       print(this->topSensor->format());
       set1X();
-      //setRow(this->unitY);
+      setRow(this->topSensorY + 1);
       print(this->topSensor->unit());
       set2X();
-      home();
+
+      setCol(this->measurementX);
+      setRow(this->bottomSensorY);
+      print(this->bottomSensor->format());
+      set1X();
+      setRow(this->bottomSensorY + 1);
+      print(this->bottomSensor->unit());
+      set2X();
     }
 };
 
@@ -567,8 +577,8 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
 CompositeGauge gauge;
 
 // instantiate shared sensor
-//MPX4250Sensor sensor2(0, 10);
-TestSensor sensor2(175,440,20);
+MPX4250Sensor sensor1(0, 10);
+TestSensor sensor2(175,440,5);
 
 
 /*
@@ -612,10 +622,10 @@ int sweepColor2[3] = {0,8,25};
 int blankColor[3] = {0,0,0};
 
 LevelOnlyIlluminationStrategy illumination(0);
-//FullSweepIlluminationStrategy illumination;
+FullSweepIlluminationStrategy fullSweepIllumination;
 //InverseFullSweepIlluminationStrategy illumination;
 IndAddrLEDStripSweep sweep1(
-  &sensor2,
+  &sensor1,
   175,
   410,
   400,
@@ -624,7 +634,7 @@ IndAddrLEDStripSweep sweep1(
   blankColor,
   &sweepLeds1,
   &alertLeds1,
-  &illumination
+  &fullSweepIllumination
 );
 IndAddrLEDStripSweep sweep2(
   &sensor2,
@@ -642,8 +652,8 @@ DualSweepLEDStrip ring(&sweep1, &sweep2, 6, 24);
 
 
 // instantiate gauge screen
-Screen screen(0x3D, &Adafruit128x64, &sensor2, 4, 15, 3, 4);
-
+//Screen screen(0x3D, &Adafruit128x64, &sensor2, 4, 15, 3, 4);
+DualSensorScreen screen(0x3D, &Adafruit128x64, &sensor1, &sensor2, 4, 15);
 
 void setup() {
   // gauge assembly time =====================
@@ -651,7 +661,7 @@ void setup() {
     // Single Sensor, Boost gauge with alert, OLED and Ring ====
     
       // add the sensor2 to the gauge
-      //gauge.add(&sensor1);
+      gauge.add(&sensor1);
       gauge.add(&sensor2);
     
       // add the ring to the gauge
@@ -669,5 +679,5 @@ void loop() {
   // tick, like in a clock, not like the insect
   gauge.tick();
 
-  delay(100);
+  delay(1);
 }
