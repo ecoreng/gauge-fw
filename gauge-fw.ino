@@ -121,20 +121,17 @@ class TestSensor : public Sensor, public GaugeComponent{
     };
 };
 
-
 /**
- * MPX4250AP sensor
- * 
- * An analog pressure sensor, which can be composable into a gauge
+ * Base class for MPX{xxxx} family of pressure sensors
  */
-class MPX4250Sensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
+class MPXSensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
   protected:
     char percentDegradation;
     
     float toKpaAbs() {
       return (float)this->measurement / 
         ((float)AnalogSensor::V_RESOLUTION_INV) / 
-        ((float)MPX4250Sensor::mV_PER_KPA / 1000) * 
+        ((float)this->mV_PER_KPA / 1000) * 
         (1 + ((float)this->percentDegradation / 100));
     }
     
@@ -150,9 +147,8 @@ class MPX4250Sensor : public PressureSensor, public AnalogSensor, public GaugeCo
     }
 
   public:
-    static const byte mV_PER_KPA = 20;
-    
-    MPX4250Sensor (char pin, char percentDegradation = 0) : 
+    static const byte mV_PER_KPA = 0;  
+    MPXSensor (char pin, char percentDegradation = 0) : 
       AnalogSensor(pin), 
       GaugeComponent() 
     {
@@ -176,6 +172,34 @@ class MPX4250Sensor : public PressureSensor, public AnalogSensor, public GaugeCo
 
     void init(void) {}
 };
+
+
+/**
+ * MPX4250AP sensor
+ * (0-250 kpa [absolute])
+ * 
+ * An analog pressure sensor, which can be composable into a gauge
+ */
+class MPX4250Sensor : public MPXSensor {
+  public:
+    static const byte mV_PER_KPA = 20;
+    MPX4250Sensor (char pin, char percentDegradation = 0) : 
+      MPXSensor(pin, percentDegradation) {}
+};
+
+/**
+ * MPX5500DP sensor
+ * (0-500 kpa [differential])
+ * 
+ * An analog pressure sensor, which can be composable into a gauge
+ */
+class MPX5500Sensor : public MPXSensor {
+  public:
+    static const byte mV_PER_KPA = 9;
+    MPX5500Sensor (char pin, char percentDegradation = 0) : 
+      MPXSensor(pin, percentDegradation) {}
+};
+
 
 
 /**
@@ -451,6 +475,10 @@ class DualSweepLEDStrip : public GaugeComponent, public Adafruit_NeoPixel {
 };
 
 
+/**
+ * An ssd1306 controlled screen that can only display ascii chars and shows 2 sensor 
+ * measurements at the same time, one on the top half, and the other on the bottom half
+ */
 class DualSensorScreen : public GaugeComponent, public SSD1306AsciiWire {
     byte address;
     Sensor *topSensor;
@@ -578,7 +606,7 @@ CompositeGauge gauge;
 
 // instantiate shared sensor
 MPX4250Sensor sensor1(0, 10);
-TestSensor sensor2(175,440,5);
+TestSensor sensor2(175,440,11);
 
 
 /*
@@ -608,16 +636,15 @@ SingleSweepLEDStrip ring(
 );
 */
 
-
-vector<int> sweepLeds1 = {17,18,19,20,21,22,23,0,1,2,3};
-vector<int> alertLeds1 = {4};
-vector<int> sweepLeds2 = {16,15,14,13,12,11,10,9,8,7,6};
-vector<int> alertLeds2 = {5};
+vector<int> sweepLeds1 = {22,23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+vector<int> alertLeds1 = {10};
+vector<int> sweepLeds2 = {21,20,19,18,17,16,15,14,13,12,11};
+vector<int> alertLeds2 = {11};
 
 // ... this is the RGB color of the alert leds
 int alertColor[3] = {255,0,0};
 // ... this is the RGB color of the level display leds
-int sweepColor1[3] = {25,8,0};
+int sweepColor1[3] = {100,3,0};
 int sweepColor2[3] = {0,8,25};
 int blankColor[3] = {0,0,0};
 
@@ -653,6 +680,7 @@ DualSweepLEDStrip ring(&sweep1, &sweep2, 6, 24);
 
 // instantiate gauge screen
 //Screen screen(0x3D, &Adafruit128x64, &sensor2, 4, 15, 3, 4);
+//Screen screen(0x3C, &Adafruit128x32, &sensor2, 4, 15, 0, 1);
 DualSensorScreen screen(0x3D, &Adafruit128x64, &sensor1, &sensor2, 4, 15);
 
 void setup() {
