@@ -126,17 +126,26 @@ class TestSensor : public Sensor, public GaugeComponent{
  */
 class MPXSensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
   protected:
-    char percentDegradation;
-    
+    char adcValueOffset = 0;
+    float error = 0;
     float toKpaAbs() {
-      return (float)this->measurement / 
+      return (((float)this->measurement + this->adcValueOffset) / 
         ((float)AnalogSensor::V_RESOLUTION_INV) / 
-        ((float)this->mV_PER_KPA / 1000) * 
-        (1 + ((float)this->percentDegradation / 100));
+        ((float)this->getMilliVoltPerKpa() / 1000) +
+        this->getKpaOffset()) *
+        (1 + this->error)
+        ;
     }
     
     float toKpaRel() {
       return toKpaAbs() - ((float)PressureSensor::ONE_ATM_KPA / 10);
+    }
+
+    float toPsiAbs() {
+      return 
+        this->toKpaAbs() * 
+        ((float)PressureSensor::ONE_ATM_PSI/10) /
+        ((float)PressureSensor::ONE_ATM_KPA/10) ;
     }
     
     float toPsiRel() {
@@ -147,12 +156,12 @@ class MPXSensor : public PressureSensor, public AnalogSensor, public GaugeCompon
     }
 
   public:
-    static const byte mV_PER_KPA = 0;  
-    MPXSensor (char pin, char percentDegradation = 0) : 
-      AnalogSensor(pin), 
-      GaugeComponent() 
+    MPXSensor (char pin, char adcValueOffset = 0, float error = 0) : 
+      AnalogSensor(pin),
+      GaugeComponent()
     {
-      this->percentDegradation = percentDegradation;
+      this->error = error;
+      this->adcValueOffset = adcValueOffset;
     }
 
     String format(void){
@@ -171,6 +180,12 @@ class MPXSensor : public PressureSensor, public AnalogSensor, public GaugeCompon
     }
 
     void init(void) {}
+
+    virtual char getMilliVoltPerKpa() = 0;
+    
+    virtual char getKpaOffset() {
+      return 0;
+    };
 };
 
 
@@ -183,8 +198,17 @@ class MPXSensor : public PressureSensor, public AnalogSensor, public GaugeCompon
 class MPX4250Sensor : public MPXSensor {
   public:
     static const byte mV_PER_KPA = 20;
-    MPX4250Sensor (char pin, char percentDegradation = 0) : 
-      MPXSensor(pin, percentDegradation) {}
+    static const byte KPA_OFFSET_AT_ZERO_V = 20;
+    MPX4250Sensor (char pin, byte adcValueOffset = 0, float error = 0.015) : 
+      MPXSensor(pin, adcValueOffset, error) {}
+
+    char getMilliVoltPerKpa() {
+      return this->mV_PER_KPA;
+    }
+
+    char getKpaOffset() {
+      return this->KPA_OFFSET_AT_ZERO_V;
+    }
 };
 
 /**
@@ -196,8 +220,19 @@ class MPX4250Sensor : public MPXSensor {
 class MPX5500Sensor : public MPXSensor {
   public:
     static const byte mV_PER_KPA = 9;
-    MPX5500Sensor (char pin, char percentDegradation = 0) : 
-      MPXSensor(pin, percentDegradation) {}
+    MPX5500Sensor (char pin, byte adcValueOffset = 0, float error = 0.0025) : 
+      MPXSensor(pin, adcValueOffset, error) {}
+    
+    char getMilliVoltPerKpa() {
+      return this->mV_PER_KPA;
+    }
+
+    String format(void){
+      float level = toPsiAbs();
+      char charBuf[10];
+      String formatted = dtostrf(level, 5, 1, charBuf);     
+      return formatted;
+    }
 };
 
 
@@ -514,25 +549,25 @@ class DualSensorScreen : public GaugeComponent, public SSD1306AsciiWire {
       begin(this->screenType, this->address);
       clear();
       setFont(X11fixed7x14B);
-      set2X();
     }
     
     void tick(void) {
+      set2X();
       setCol(this->measurementX);
       setRow(this->topSensorY);
       print(this->topSensor->format());
       set1X();
       setRow(this->topSensorY + 1);
       print(this->topSensor->unit());
-      set2X();
 
+      set2X();
       setCol(this->measurementX);
       setRow(this->bottomSensorY);
       print(this->bottomSensor->format());
       set1X();
       setRow(this->bottomSensorY + 1);
       print(this->bottomSensor->unit());
-      set2X();
+      home();
     }
 };
 
@@ -605,7 +640,8 @@ class Screen : public GaugeComponent, public SSD1306AsciiWire {
 CompositeGauge gauge;
 
 // instantiate shared sensor
-MPX4250Sensor sensor1(0, 10);
+//MPX4250Sensor sensor1(0, -50);
+MPX5500Sensor sensor1(0, -50);
 TestSensor sensor2(175,440,11);
 
 
@@ -644,18 +680,18 @@ vector<int> alertLeds2 = {11};
 // ... this is the RGB color of the alert leds
 int alertColor[3] = {255,0,0};
 // ... this is the RGB color of the level display leds
-int sweepColor1[3] = {100,3,0};
-int sweepColor2[3] = {0,8,25};
-int blankColor[3] = {0,0,0};
+int sweepColor1[3] = {90,3,0};
+int sweepColor2[3] = {0,0,25};
+int blankColor[3] = {1,1,1};
 
 LevelOnlyIlluminationStrategy illumination(0);
 FullSweepIlluminationStrategy fullSweepIllumination;
 //InverseFullSweepIlluminationStrategy illumination;
 IndAddrLEDStripSweep sweep1(
   &sensor1,
-  175,
-  410,
-  400,
+  0,
+  100,
+  95,
   sweepColor1,
   alertColor,
   blankColor,
