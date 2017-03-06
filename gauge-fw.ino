@@ -45,8 +45,8 @@ SingleSweepLEDStrip ring(
 SingleDataSourceScreen screen(0x3D, &Adafruit128x64, &sensor, D4, 15, 3, 4);
 
 void setup() {
+  // required for the i2c protocol
   Wire.begin();
-  Serial.begin(115200);
   
   // gauge assembly time =====================
 

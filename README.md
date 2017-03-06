@@ -8,6 +8,8 @@ A framework to build automotive (and other?) gauges, using arduino and arduino c
 - ???
 - profit?.
 
+## Example?
+Yes, ``gauge-fw.ino``
 
 ## DISCLAIMER
 Warning: This is my first time using C++ so code has a high probability of sucking.
