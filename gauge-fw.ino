@@ -1,15 +1,23 @@
+// Use 3.3 Volts
+#define V33
+
 #include "gauge_fw.h"
 #include "datasource.h"
 #include "display.h"
 #include "SSD1306Ascii.h"
 #include <Wire.h>
 
+int readAnalog2(char location) {
+    return analogRead(location);
+};
+readerFunc analogReader2 = &readAnalog2;
+
+
 // instantiate gauge container
 CompositeGauge gauge;
 
 // instantiate shared sensor
 TestSensor sensor(175,440,11);
-
 
 // define some variables that we'll later reuse to describe our ring
 // ... these leds are available for display of regular level
@@ -49,9 +57,10 @@ void setup() {
   Wire.begin();
   
   // gauge assembly time =====================
-
-    // Single Sensor, Boost gauge with alert, OLED and Ring ====
     
+    // Single Sensor, Boost gauge with alert, OLED and Ring ====
+      sensor.setReader(&analogReader2);
+      
       gauge.add(&sensor);
     
       // add the ring to the gauge

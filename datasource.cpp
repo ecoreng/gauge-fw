@@ -1,12 +1,26 @@
 #include "datasource.h"
 using namespace std;
 
-AnalogSensor::AnalogSensor(char pin) : DataSource() {
-    this->analogPin = pin;
+int readAnalog(char location) {
+    return analogRead(location);
+};
+
+readerFunc analogReader = &readAnalog;
+
+DataSource::DataSource() {
+    this->reader = &analogReader;
+};
+
+void DataSource::setReader(readerFunc *reader) {
+    this->reader = reader;
+};
+
+AnalogSensor::AnalogSensor(char location) : DataSource() {
+    this->location = location;
 }
 
 void AnalogSensor::read() {
-    measurement = analogRead(this->analogPin);
+    measurement = analogRead(this->location);
 }
 
 int AnalogSensor::raw(void) {

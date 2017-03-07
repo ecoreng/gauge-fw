@@ -12,15 +12,29 @@
 using namespace std;
 
 /**
+ * The reader function for the data source
+ */
+typedef int (*readerFunc)(char);
+
+/**
+ * Default analog input reader for arduino
+ */
+int readAnalog(char location);
+
+/**
  * Abstract DataSource
  */
 class DataSource {
+protected:
+    readerFunc *reader;
 public:
+    DataSource();
     virtual void init(void) = 0;
     virtual void read(void) = 0;
     virtual int raw(void) = 0;
     virtual String unit(void) = 0;
     virtual String format(void) = 0;
+    void setReader(readerFunc *reader);
 };
 
 
@@ -29,12 +43,16 @@ public:
  */
 class AnalogSensor : public DataSource {
 protected:
-    char analogPin;
+    char location;
     word measurement;
     void read();
 public:
+#ifdef V33
+    static const byte V_RESOLUTION_INV = 310; // ~(1024 / 3.3)
+#else
     static const byte V_RESOLUTION_INV = 204; // ~(1024 / 5)
-    AnalogSensor(char pin);
+#endif
+    AnalogSensor(char location);
     int raw(void);
 };
 
@@ -108,9 +126,14 @@ public:
  */
 class MPX4250Sensor : public MPXSensor {
 public:
+#ifdef V33
+    static const byte mV_PER_KPA = 13;
+    static const byte KPA_OFFSET_AT_ZERO_V = 13;
+#else
     static const byte mV_PER_KPA = 20;
     static const byte KPA_OFFSET_AT_ZERO_V = 20;
-
+#endif
+    
     MPX4250Sensor(char pin, byte adcValueOffset = 0, float error = 0.015);
     char getMilliVoltPerKpa();
     char getKpaOffset();
@@ -125,8 +148,11 @@ public:
  */
 class MPX5500Sensor : public MPXSensor {
 public:
+#ifdef V33
+    static const byte mV_PER_KPA = 6;
+#else
     static const byte mV_PER_KPA = 9;
-
+#endif
     MPX5500Sensor(char pin, byte adcValueOffset = 0, float error = 0.0025);
 
     char getMilliVoltPerKpa();
