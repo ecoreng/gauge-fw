@@ -1,6 +1,11 @@
 #include "display.h"
 #include <Wire.h>
 
+int IlluminationStrategy::getFirstLedKeyDiff(int previousLedCount, int ledCount) {
+  return 0;
+}
+
+
 FullSweepIlluminationStrategy::FullSweepIlluminationStrategy() :
     IlluminationStrategy() {}
     
@@ -76,9 +81,17 @@ void IndAddrLEDStripSweep::update(Adafruit_NeoPixel *ledStrip) {
   int howManyLeds = percentileLevel * this->sweepLeds->size() - 1;
 
   int ledKey = 0;
+  //  get initial modified LED key, so that we skip the whole strip and only update the modified LEDs
+  int startingLedKey = this->strategy->getFirstLedKeyDiff(this->previousLedCount, howManyLeds);
+  this->previousLedCount = howManyLeds;
   for (vector<int>::iterator it = this->sweepLeds->begin(); it != this->sweepLeds->end(); ++it) {
+    if (ledKey < startingLedKey) {
+      goto contin;
+    }
     int *color = this->strategy->getIlluminationColor(ledKey, howManyLeds, this->baseColor, this->blankColor);        
     ledStrip->setPixelColor(*it, color[0], color[1], color[2]);
+    
+    contin:;
     ledKey++;
   }
 

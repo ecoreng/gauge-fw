@@ -22,6 +22,7 @@ using namespace std;
  */
 class IlluminationStrategy {
   public:
+    virtual int getFirstLedKeyDiff(int previousLevel, int level) = 0;
     virtual int *getIlluminationColor(int currentLed, int level, int *baseColor, int *blankColor) = 0;
 };
 
@@ -73,6 +74,7 @@ class IndAddrLEDStripSweep {
     DataSource *dataSource;
     bool currentlyAlerting = false;
     IlluminationStrategy *strategy;
+    int previousLedCount = 0;
   public:
     vector<int> *sweepLeds;
     vector<int> *alertLeds;
