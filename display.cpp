@@ -231,17 +231,21 @@ void DualDataSourceScreen::tick(void) {
   setCol(this->measurementX);
   setRow(this->topDataSourceY);
   print(this->topDataSource->format());
+  setFont(font5x7);
   set1X();
-  setRow(this->topDataSourceY + 1);
+  setRow(this->topDataSourceY + 2);
   print(this->topDataSource->unit());
+  setFont(X11fixed7x14B);
 
   set2X();
   setCol(this->measurementX);
   setRow(this->bottomDataSourceY);
   print(this->bottomDataSource->format());
+  setFont(font5x7);
   set1X();
-  setRow(this->bottomDataSourceY + 1);
+  setRow(this->bottomDataSourceY + 2);
   print(this->bottomDataSource->unit());
+  setFont(X11fixed7x14B);
   home();
 }
 
@@ -271,9 +275,11 @@ void SingleDataSourceScreen::tick(void) {
   setCol(this->measurementX);
   setRow(this->measurementY);
   print(this->dataSource->format());
+  setFont(font5x7);
   set1X();
   setRow(this->unitY);
   print(this->dataSource->unit());
+  setFont(X11fixed7x14B);
   set2X();
   home();
 }
