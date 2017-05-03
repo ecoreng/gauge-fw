@@ -119,7 +119,7 @@ DualSweepLEDStrip ring(&sweep1, &sweep2, D6, 24);
 //SingleDataSourceScreen screen(0x3D, &Adafruit128x64, &sensor, D4, 15, 2, 4);
 //SingleDataSourceScreen screen2(0x3C, &SH1106_128x64, &sensor2, -1, 15, 2, 4);
 DualDataSourceScreen screen2(&sensor, &sensor2, 15, 0x3C, &SH1106_128x64, -1);
-DualDataSourceScreen screen(&sensor2, &sensor, 15, 0x3D, &Adafruit128x64, -1);
+//DualDataSourceScreen screen(&sensor2, &sensor, 15, 0x3D, &Adafruit128x64, -1);
 
 void setup() {
   // required for the i2c protocol
@@ -138,7 +138,7 @@ void setup() {
       gauge.add(&ring2);
       
       // add the oled screen
-      gauge.add(&screen);
+      //gauge.add(&screen);
       gauge.add(&screen2);
       
       // ===================================

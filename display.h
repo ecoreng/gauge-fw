@@ -22,7 +22,7 @@ using namespace std;
  */
 class IlluminationStrategy {
   public:
-    virtual int getFirstLedKeyDiff(int previousLevel, int level) = 0;
+    virtual int getFirstLedKeyDiff(int previousLevel, int level);
     virtual int *getIlluminationColor(int currentLed, int level, int *baseColor, int *blankColor) = 0;
 };
 
@@ -33,6 +33,7 @@ class IlluminationStrategy {
 class FullSweepIlluminationStrategy : public IlluminationStrategy {
   public:
     FullSweepIlluminationStrategy();
+    int getFirstLedKeyDiff(int previousLevel, int level);
     int *getIlluminationColor(int currentLed, int level, int *baseColor, int *blankColor);
 };
 

@@ -13,6 +13,9 @@ int* FullSweepIlluminationStrategy::getIlluminationColor(int currentLed, int lev
   return currentLed <= level ? baseColor : blankColor;
 }
 
+int FullSweepIlluminationStrategy::getFirstLedKeyDiff(int previousLedCount, int ledCount) {
+  return previousLedCount <= ledCount ? previousLedCount : ledCount;
+}
 
 
 InverseFullSweepIlluminationStrategy::InverseFullSweepIlluminationStrategy() : IlluminationStrategy() {}
@@ -86,12 +89,12 @@ void IndAddrLEDStripSweep::update(Adafruit_NeoPixel *ledStrip) {
   this->previousLedCount = howManyLeds;
   for (vector<int>::iterator it = this->sweepLeds->begin(); it != this->sweepLeds->end(); ++it) {
     if (ledKey < startingLedKey) {
-      goto contin;
+      ledKey++;
+      continue;
     }
     int *color = this->strategy->getIlluminationColor(ledKey, howManyLeds, this->baseColor, this->blankColor);        
     ledStrip->setPixelColor(*it, color[0], color[1], color[2]);
     
-    contin:;
     ledKey++;
   }
 
