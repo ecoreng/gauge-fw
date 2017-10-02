@@ -65,7 +65,6 @@ DualSweepLEDStrip ring(&sweep1, &sweep2, D4, 24);
 
 // instantiate gauge screen
 DualDataSourceScreen screen(&sensor, &sensor2, 15, 0x3C, &SH1106_128x64, -1);
-//DualDataSourceScreen screen(&sensor2, &sensor, 15, 0x3D, &Adafruit128x64, -1);
 
 Adafruit_MCP3008 adc;
 
@@ -74,8 +73,6 @@ readerFunc adcRead = *([adc](char channel) -> int {
 });
 
 void setup() {
-  Serial.begin(9600);
-  
   // required for the i2c protocol
   Wire.begin();
   
