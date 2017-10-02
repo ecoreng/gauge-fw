@@ -20,7 +20,7 @@ AnalogSensor::AnalogSensor(char location) : DataSource() {
 }
 
 void AnalogSensor::read() {
-    measurement = analogRead(this->location);
+    measurement = (*reader)(this->location);
 }
 
 int AnalogSensor::raw(void) {
@@ -84,12 +84,13 @@ MPXSensor::MPXSensor(char pin, char adcValueOffset, float error) :
 }
 
 float MPXSensor::toKpaAbs() {
-    return (
-        ((float) this->measurement + this->adcValueOffset) /
+    float localMeasurement = (
+        ((float) this->measurement - this->adcValueOffset) /
         ((float) AnalogSensor::V_RESOLUTION_INV) /
         ((float) this->getMilliVoltPerKpa() / 1000) +
         this->getKpaOffset()) *
         (1 + this->error);
+    return localMeasurement;
 }
 
 float MPXSensor::toKpaRel() {
@@ -107,6 +108,7 @@ float MPXSensor::toPsiRel() {
         ((float) PressureSensor::ONE_ATM_PSI / 10) /
         ((float) PressureSensor::ONE_ATM_KPA / 10);
 }
+void MPXSensor::init(void) {}
 
 
 
