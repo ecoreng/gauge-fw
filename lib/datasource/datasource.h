@@ -1,13 +1,14 @@
 #ifndef DATASOURCE_H
  #define DATASOURCE_H
         
-#ifdef ESP8266  || defined(ESP32)
+#if defined(ESP8266) || defined(ESP32)
  #include <vector>
 #else
  #include <ArduinoSTL>
 #endif
 #include "gauge_fw.h"
 #include "Arduino.h"
+#include <SoftwareSerial.h>
 
 using namespace std;
 
@@ -67,6 +68,30 @@ public:
     // divide these 2 by 10
     static const word ONE_ATM_KPA = 1013;
     static const byte ONE_ATM_PSI = 147;
+};
+
+
+/**
+ * Serial Source
+ */
+class SoftwareSerialSensor : public GaugeComponent, public DataSource {
+protected:
+    SoftwareSerial *serialConnection;
+    String unitName;
+    int measurement = 0;
+    int baudRate;
+public:
+    SoftwareSerialSensor(
+      SoftwareSerial *serialConnection, 
+      String unitName,
+      int baudRate
+    );
+    void read();
+    void tick(void);
+    void init(void);
+    String format(void);
+    String unit(void);
+    int raw(void);
 };
 
 

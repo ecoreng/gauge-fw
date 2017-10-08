@@ -1,4 +1,6 @@
 #include "datasource.h"
+#include <SoftwareSerial.h>
+
 using namespace std;
 
 int readAnalog(char location) {
@@ -7,16 +9,19 @@ int readAnalog(char location) {
 
 readerFunc analogReader = &readAnalog;
 
-DataSource::DataSource() {
-    this->reader = &analogReader;
-};
+
+
+DataSource::DataSource() {};
 
 void DataSource::setReader(readerFunc *reader) {
     this->reader = reader;
 };
 
+
+
 AnalogSensor::AnalogSensor(char location) : DataSource() {
     this->location = location;
+    this->reader = &analogReader;
 }
 
 void AnalogSensor::read() {
@@ -26,6 +31,53 @@ void AnalogSensor::read() {
 int AnalogSensor::raw(void) {
     return this->measurement;
 }
+
+
+
+SoftwareSerialSensor::SoftwareSerialSensor(
+  SoftwareSerial *serialConnection,
+  String unitName = "",
+  int baudRate = 9600
+  ) : GaugeComponent(), DataSource() {
+    this->serialConnection = serialConnection;
+    this->unitName = unitName;
+    this->baudRate = baudRate;
+}
+
+String SoftwareSerialSensor::format(void) {
+  float adjusted = (measurement);
+  char charBuf[10];
+  String formatted = dtostrf(adjusted, 5, 1, charBuf);
+  return formatted;
+}
+
+String SoftwareSerialSensor::unit(void) {
+  return unitName;
+}
+
+void SoftwareSerialSensor::tick(void) {
+  this->read();
+}
+
+int SoftwareSerialSensor::raw(void) {
+  return measurement;
+};
+
+void SoftwareSerialSensor::read() {
+  // this is not the right way of handling this
+  //  we should create a buffer, and read until we find \n
+  //  then, use that as a value
+  // Doing it this way actually gets cutoff mid value :(
+  if (this->serialConnection->available()) {
+    String preMeasurement = this->serialConnection->readStringUntil('\n');
+    measurement = preMeasurement.toInt();
+  }
+}
+void SoftwareSerialSensor::init(void) {
+  this->serialConnection->begin(baudRate);
+  delay(1000);
+}
+
 
 
 TestSensor::TestSensor(
@@ -56,7 +108,6 @@ void TestSensor::tick(void) {
         this->measurement -= this->speed;
     }
 }
-
 
 void TestSensor::init(void) {}
 
@@ -108,9 +159,8 @@ float MPXSensor::toPsiRel() {
         ((float) PressureSensor::ONE_ATM_PSI / 10) /
         ((float) PressureSensor::ONE_ATM_KPA / 10);
 }
+
 void MPXSensor::init(void) {}
-
-
 
 String MPXSensor::format(void) {
     float level = toPsiRel();
@@ -144,6 +194,7 @@ char MPX4250Sensor::getKpaOffset() {
 }
 
 
+
 MPX5500Sensor::MPX5500Sensor(
     char pin,
     byte adcValueOffset,
@@ -160,3 +211,4 @@ String MPX5500Sensor::format(void) {
     String formatted = dtostrf(level, 5, 1, charBuf);
     return formatted;
 }
+

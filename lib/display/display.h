@@ -1,7 +1,7 @@
 #ifndef DISPLAY_H
  #define DISPLAY_H
 
-#ifdef ESP8266 || defined(ESP32)
+#if defined(ESP8266) || defined(ESP32)
  #include <vector>
 #else
  #include <ArduinoSTL>

@@ -1,5 +1,6 @@
 #include "display.h"
 #include <Wire.h>
+#include <Adafruit_NeoPixel.h>
 
 int IlluminationStrategy::getFirstLedKeyDiff(int previousLedCount, int ledCount) {
   return 0;
@@ -141,15 +142,15 @@ SingleSweepLEDStrip::SingleSweepLEDStrip(
   vector<int> *sweepLeds,
   vector<int> *alertLeds
   ) : GaugeComponent(), Adafruit_NeoPixel(totalLeds, dataPin, NEO_GRB + NEO_KHZ800)
-   {
+   {    
     this->sweep = new IndAddrLEDStripSweep(
       dataSource,
       minLevel,
       maxLevel,
       alertLevel,
       baseColor,
-      blankColor,
       alertColor,
+      blankColor,
       sweepLeds,
       alertLeds,
       new FullSweepIlluminationStrategy()
