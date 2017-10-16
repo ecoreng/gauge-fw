@@ -1,14 +1,16 @@
 #ifndef DATASOURCE_H
- #define DATASOURCE_H
+#define DATASOURCE_H
         
 #if defined(ESP8266) || defined(ESP32)
  #include <vector>
 #else
- #include <ArduinoSTL>
+ #include <ArduinoSTL.h>
 #endif
 #include "gauge_fw.h"
 #include "Arduino.h"
 #include <SoftwareSerial.h>
+#include "elm327.h"
+
 
 using namespace std;
 
@@ -26,16 +28,20 @@ int readAnalog(char location);
  * Abstract DataSource
  */
 class DataSource {
-protected:
-    readerFunc *reader;
 public:
     DataSource();
+
+    // initialization routines
     virtual void init(void) = 0;
-    virtual void read(void) = 0;
+
+    // return the raw measurement (usually 0-1023)
     virtual int raw(void) = 0;
-    virtual String unit(void) = 0;
+
+    // return the real measurement
     virtual String format(void) = 0;
-    void setReader(readerFunc *reader);
+
+    // return the unit of the real measurement
+    virtual String unit(void) = 0;
 };
 
 
@@ -46,15 +52,17 @@ class AnalogSensor : public DataSource {
 protected:
     char location;
     word measurement;
+    readerFunc *reader;    
     void read();
 public:
 #ifdef V33
-    static const byte V_RESOLUTION_INV = 310; // ~(1024 / 3.3)
+    static const word V_RESOLUTION_INV = 310; // ~(1024 / 3.3)
 #else
     static const byte V_RESOLUTION_INV = 204; // ~(1024 / 5)
 #endif
     AnalogSensor(char location);
     int raw(void);
+    void setReader(readerFunc *reader);
 };
 
 
@@ -182,6 +190,25 @@ public:
 
     char getMilliVoltPerKpa();
     String format(void);
+};
+
+
+
+template <class D, class M>
+class OBD2Source : public DataSource, public GaugeComponent {
+protected:
+    D *obd2Driver;
+    String command;
+    String value;
+    String unitValue;
+    int rawValue;
+public:
+    OBD2Source(D *obd2Driver, String command);
+    void init(void);
+    int raw(void);
+    String format(void);
+    void tick(void);
+    String unit(void);    
 };
 
 #endif

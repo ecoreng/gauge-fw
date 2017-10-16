@@ -1,49 +1,62 @@
+#define DELAYLENGTH 1000 // less than 2 secs or it resets
+#define SERIALTIMEOUT 1000 // less than 2 secs or it resets
+#define V33
+
+#define DEBUG_ELM 0
+
+#include "PID.h"
+#include "SoftwareSerial.h"
 #include "elm327.h"
 #include "elm327.cpp"
-#include "PID.h"
+#include "datasource.h"
+#include "datasource.cpp"
+#include "gauge_fw.h"
+#include "display.h"
 
-class ArrayMockSerial : public MockSerial {
-  char data[20];
-  int total = 20;
-  int i = 0;
 
-  public:
-    void println(String payload) {
-      Serial.println("sending:");
-      Serial.println(payload);
-      i = 0;
-      if (payload == "ATI") {
-        strcpy(data, " ELM327            ");
-      }
-      else if (payload == PID_RPM) {
-        strcpy(data, " ZZ ZZ 1F  FF      ");
-      }
-    }
-    
-    int available() {
-      return total - i;
-    }
-    
-    int read() {
-      return data[i++];
-    }
-};
+SoftwareSerial softSerial(D8, D7);
+ELM327<SoftwareSerial> obd2Driver(&softSerial);
+OBD2Source<ELM327<SoftwareSerial>, Measurement> obd2Source(
+  &obd2Driver,
+  PID_RPM
+);
+// instantiate gauge container
+CompositeGauge gauge;
 
-ArrayMockSerial serialMock;
-ELM327<ArrayMockSerial> obd(&serialMock);
 
+vector<int> sweepLeds1 = {0,1,2,3,4,5,6};
+vector<int> alertLeds1 = {7};
+int alertColor[3] = {255,0,0};
+int sweepColor1[3] = {2,2,1};
+int blankColor[3] = {0,0,0};
+
+SingleSweepLEDStrip strip(
+  &obd2Source,
+  D5,
+  8,
+  0,
+  200,
+  180,
+  sweepColor1,
+  blankColor,
+  alertColor,
+  &sweepLeds1,
+  &alertLeds1
+);
 
 void setup() {
   Serial.begin(9600);
   while(!Serial){}
+  
+  softSerial.begin(38400);
   delay(500);
-  obd.init();
+
+  gauge.add(&obd2Source);
+  gauge.add(&strip);
 }
 
 void loop() {
-  String bleh = obd.get(PID_RPM);
-  Serial.println("Receiving");
-  Serial.println(bleh);
-  Serial.println(" ");
-  delay(1500);
+  gauge.tick();
+  delay(150);
 }
+

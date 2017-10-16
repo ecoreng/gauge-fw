@@ -1,5 +1,7 @@
 #include "datasource.h"
-#include <SoftwareSerial.h>
+#include "SoftwareSerial.h"
+#include "elm327.h"
+
 
 using namespace std;
 
@@ -10,18 +12,17 @@ int readAnalog(char location) {
 readerFunc analogReader = &readAnalog;
 
 
-
 DataSource::DataSource() {};
-
-void DataSource::setReader(readerFunc *reader) {
-    this->reader = reader;
-};
 
 
 
 AnalogSensor::AnalogSensor(char location) : DataSource() {
     this->location = location;
     this->reader = &analogReader;
+}
+
+void AnalogSensor::setReader(readerFunc *reader) {
+    this->reader = reader;
 }
 
 void AnalogSensor::read() {
@@ -90,8 +91,6 @@ TestSensor::TestSensor(
     this->speed = speed;
     this->measurement = minLevel;
 }
-
-void TestSensor::read(void) {}
 
 void TestSensor::tick(void) {
     if (this->measurement > this->maxLevel && this->direction == 1) {
@@ -212,3 +211,41 @@ String MPX5500Sensor::format(void) {
     return formatted;
 }
 
+
+
+template <class D, class M>
+OBD2Source<D, M>::OBD2Source(
+    D *obd2Driver,
+    String command
+) : DataSource() {
+    this->obd2Driver = obd2Driver;
+    this->command = command;
+}
+
+template <class D, class M>
+void OBD2Source<D, M>::init(void) {
+    this->obd2Driver->init();
+}
+
+template <class D, class M>
+void OBD2Source<D, M>::tick(void) {
+    M measurement = this->obd2Driver->get(this->command);
+    rawValue = measurement.raw;
+    value = measurement.value;
+    unitValue = measurement.unit;
+}
+
+template <class D, class M>
+int OBD2Source<D, M>::raw(void) {
+    return rawValue;
+}
+
+template <class D, class M>
+String OBD2Source<D, M>::format(void) {
+    return value;
+}
+
+template <class D, class M>
+String OBD2Source<D, M>::unit(void) {
+    return unitValue;
+}
