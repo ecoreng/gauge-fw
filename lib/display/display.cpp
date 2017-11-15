@@ -1,6 +1,10 @@
 #include "display.h"
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
+#include <SSD1306Ascii.h>
+#include <SSD1306Ascii.cpp>
+#include <SSD1306AsciiWire.h>
+
 
 int IlluminationStrategy::getFirstLedKeyDiff(int previousLedCount, int ledCount) {
   return 0;

@@ -1,12 +1,12 @@
 // Use 3.3 Volts
-#define V33
-
 #include "gauge_fw.h"
 #include "datasource.h"
 #include "display.h"
 #include "SSD1306Ascii.h"
 #include <Wire.h>
+#include <SPI.h>
 
+#define V33
 
 // instantiate gauge container
 CompositeGauge gauge;
@@ -16,15 +16,15 @@ TestSensor sensor(175,440,11);
 
 // define some variables that we'll later reuse to describe our ring
 // ... these leds are available for display of regular level
-vector<int> sweepLeds = {20,21,22,23,0,1,2,3,4,5,6,7,8,9,10,11,12};
+vector<int> sweepLeds = {15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8};
 // ... these leds are alert leds
-vector<int> alertLeds = {13,14,15,16,17,18,19};
+vector<int> alertLeds = {9,10,11,12,13,14};
 // ... this is the RGB color of the alert leds
-int alertColor[3] = {255,0,0};
+int alertColor[3] = {100,0,0};
 // ... this is the RGB color of the level display leds
 int sweepColor[3] = {25,8,0};
 // ... blank color
-int blankColor[3] = {1,1,1};
+int blankColor[3] = {0,0,0};
 
 
 // instantiate light ring
@@ -36,8 +36,8 @@ SingleSweepLEDStrip ring(
     410,        // maximum displayed level
     400,        // alert level
     sweepColor, // color of the sweep leds
-    alertColor, // color of the alert leds
     blankColor, // blank color for the sweep
+    alertColor, // color of the alert leds
     &sweepLeds, // ids of the sweep leds
     &alertLeds  // ids of the alert leds
 );
