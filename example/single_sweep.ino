@@ -1,7 +1,7 @@
 // Use 3.3 Volts
-#include "gauge_fw.h"
-#include "datasource.h"
-#include "display.h"
+#include "Gauge.h"
+#include "Datasource.h"
+#include "Display.h"
 #include "SSD1306Ascii.h"
 #include <Wire.h>
 #include <SPI.h>
