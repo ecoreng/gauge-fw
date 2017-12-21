@@ -94,9 +94,26 @@ class Sweep {
       IlluminationStrategy *strategy
       );
 
-    void update(Adafruit_NeoPixel *ledStrip);
+    virtual void update(Adafruit_NeoPixel *ledStrip);
+    virtual bool isAlert();
+};
 
-    bool isAlert();
+
+class AlertOverlappedSweep : public Sweep {
+  public:
+    AlertOverlappedSweep(
+      DataSource *dataSource,
+      int minLevel,
+      int maxLevel,
+      int alertLevel,
+      int baseColor[3],
+      int alertColor[3],
+      int blankColor[3],
+      vector<int> *sweepLeds,
+      vector<int> *alertLeds,
+      IlluminationStrategy *strategy
+    );
+    void update(Adafruit_NeoPixel *ledStrip);
 };
 
 
@@ -127,7 +144,6 @@ public:
       byte address;
     DevType const *screenType;
     AsciiOledScreenWire(
-      
       byte address,
       DevType const *screenType,
       byte resetPin

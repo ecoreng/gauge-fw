@@ -152,6 +152,34 @@ int TestSensor::raw(void) {
 };
 
 
+
+StaticTestSensor::StaticTestSensor(
+    word measurement
+    ): DataSource(), GaugeComponent() {
+    this->measurement = measurement;
+}
+
+void StaticTestSensor::tick(void) {}
+
+void StaticTestSensor::init(void) {}
+
+String StaticTestSensor::format(void) {
+    float adjusted = ((float) measurement / 10 - 50);
+    char charBuf[10];
+    String formatted = dtostrf(adjusted, 5, 1, charBuf);
+    return formatted;
+};
+
+String StaticTestSensor::unit(void) {
+    return "unit";
+};
+
+int StaticTestSensor::raw(void) {
+    return measurement;
+};
+
+
+
 template <class D, class M>
 OBD2Source<D, M>::OBD2Source(
     D *obd2Driver,

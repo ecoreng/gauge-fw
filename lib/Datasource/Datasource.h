@@ -139,6 +139,21 @@ public:
     int raw(void);
 };
 
+/**
+ * Static test sensor
+ */
+class StaticTestSensor : public DataSource, public GaugeComponent {
+    word measurement = 0;
+public:
+    StaticTestSensor(word measurement);
+    void read();
+    void tick(void);
+    void init(void);
+    String format(void);
+    String unit(void);
+    int raw(void);
+};
+
 
 template <class D, class M>
 class OBD2Source : public DataSource, public GaugeComponent {

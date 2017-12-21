@@ -18,6 +18,7 @@ int* FullSweepIlluminationStrategy::getIlluminationColor(int currentLed, int lev
 }
 
 int FullSweepIlluminationStrategy::getFirstLedKeyDiff(int previousLedCount, int ledCount) {
+  return 0;
   return previousLedCount <= ledCount ? previousLedCount : ledCount;
 }
 
@@ -127,7 +128,81 @@ void Sweep::update(Adafruit_NeoPixel *ledStrip) {
 }
 
 bool Sweep::isAlert() {
-  return dataSource->raw() > this->alertLevel;
+  return dataSource->raw() >= this->alertLevel;
+}
+
+
+AlertOverlappedSweep::AlertOverlappedSweep(
+  DataSource *dataSource,
+  int minLevel,
+  int maxLevel,
+  int alertLevel,
+  int baseColor[3],
+  int alertColor[3],
+  int blankColor[3],
+  vector<int> *sweepLeds,
+  vector<int> *alertLeds,
+  IlluminationStrategy *strategy
+) : Sweep(
+  dataSource,
+  minLevel,
+  maxLevel,
+  alertLevel,
+  baseColor,
+  alertColor,
+  blankColor,
+  sweepLeds,
+  alertLeds,
+  strategy
+  ) {}
+
+void AlertOverlappedSweep::update(Adafruit_NeoPixel *ledStrip) {
+  long processedLeds = 0;
+
+  // check if new reading triggered alert
+  if (this->isAlert()) {
+    // set state to "alerting"
+    this->currentlyAlerting = true;
+
+    // set all alerting leds to the alert color
+    for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
+      ledStrip->setPixelColor(*it, alertColor[0], alertColor[1], alertColor[2]);
+      processedLeds += (1 << *it);
+    }
+  } else  {
+    // alert threshold not crossed,
+    //  now check if we were alerting @ the past tick
+    if (currentlyAlerting) {
+      // yes.. so we dont need to alert any more, set state to NOT alerting
+      this->currentlyAlerting = false;
+
+      // turn off all alert leds
+      for (vector<int>::iterator it = this->alertLeds->begin(); it != this->alertLeds->end(); ++it) {
+        ledStrip->setPixelColor(*it, blankColor[0], blankColor[1], blankColor[2]);
+      }
+    }
+  }
+
+  // calculate how many leds should be lit, by calculating the ranges
+  int relativeLevel = dataSource->raw() - this->minLevel;
+  int sweepRange = this->maxLevel - this->minLevel;
+  float percentileLevel = relativeLevel / (float)sweepRange;
+  int howManyLeds = percentileLevel * this->sweepLeds->size() - 1;
+
+  int ledKey = 0;
+  //  get initial modified LED key, so that we skip the whole strip and only update the modified LEDs
+  int startingLedKey = this->strategy->getFirstLedKeyDiff(this->previousLedCount, howManyLeds);
+  this->previousLedCount = howManyLeds;
+  for (vector<int>::iterator it = this->sweepLeds->begin(); it != this->sweepLeds->end(); ++it) {
+    if (ledKey < startingLedKey || (processedLeds & (1 << *it)) > 0) {
+      ledKey++;
+      continue;
+    }
+    int *color = this->strategy->getIlluminationColor(ledKey, howManyLeds, this->baseColor, this->blankColor);        
+    ledStrip->setPixelColor(*it, color[0], color[1], color[2]);
+    
+    ledKey++;
+  }
 }
 
 

@@ -1,47 +1,37 @@
-#include <Adafruit_MCP3008.h>
-#include "gauge_fw.h"
-#include "datasource.h"
-#include "display.h"
+#include "Gauge.h"
+#include "Datasource.h"
+#include "Display.h"
 #include "SSD1306Ascii.h"
 #include <Wire.h>
 #include <SPI.h>
-
-// Use 3.3 Volts
-#define V33
-
-//define pin connections
-#define CS_PIN D8
-#define CLOCK_PIN D5
-#define MOSI_PIN D7
-#define MISO_PIN D6
 
 // instantiate gauge container
 CompositeGauge gauge;
 
 // instantiate shared sensor
-TestSensor sensor(175,440,11);
-TestSensor sensor2(175,440,20);
-//MPX5500Sensor sensor2(0, 40);
+TestSensor sensor(90, 120, 1);
+TestSensor sensor2(90, 120, 1);
+TestSensor sensor3(80, 105, 2);
 
 vector<int> sweepLeds1 = {17,16,15,14,13,12,11,10,9,8,7,6};
-vector<int> alertLeds1 = {6};
-vector<int> sweepLeds2 = {18,19,20,21,22,23,0,1,2,3,4};
-vector<int> alertLeds2 = {5};
+vector<int> alertLeds1 = {11,10,9,8,7,6};
+vector<int> sweepLeds2 = {18,19,20,21,22,23,0,1,2,3,4,5};
+vector<int> alertLeds2 = {23,0,1,2,3,4,5};
 
 // ... this is the RGB color of the alert leds
-int alertColor[3] = {255,0,0};
+int alertColor[3] = {10,0,0};
 // ... this is the RGB color of the level display leds
-int sweepColor1[3] = {2,2,1};
-int sweepColor2[3] = {8,1,0};
+int sweepColor1[3] = {0,0,1};
+int sweepColor2[3] = {0,0,1};
 int blankColor[3] = {0,0,0};
 
-//LevelOnlyIlluminationStrategy illumination(0);
+
 FullSweepIlluminationStrategy illumination;
-IndAddrLEDStripSweep sweep1(
-  &sensor,
-  175,
-  410,
-  400,
+AlertOverlappedSweep sweep1(
+  &sensor3,
+  31,
+  99,
+  99,
   sweepColor1,
   alertColor,
   blankColor,
@@ -49,11 +39,11 @@ IndAddrLEDStripSweep sweep1(
   &alertLeds1,
   &illumination
 );
-IndAddrLEDStripSweep sweep2(
+AlertOverlappedSweep sweep2(
   &sensor2,
-  175,
-  410,
-  400,
+  31,
+  99,
+  99,
   sweepColor2,
   alertColor,
   blankColor,
@@ -61,34 +51,29 @@ IndAddrLEDStripSweep sweep2(
   &alertLeds2,
   &illumination
 );
-DualSweepLEDStrip ring(&sweep1, &sweep2, D4, 24);
-
+MultiSweepLEDStrip strip(D4, 24);
 
 // instantiate gauge screen
-DualDataSourceScreen screen(&sensor2, &sensor, 15, 0x3C, &SH1106_128x64, -1);
-
-Adafruit_MCP3008 adc;
-
-readerFunc adcRead = *([adc](char channel) -> int {
-  return adc.readADC(channel);
-});
+DualDataSourceScreen screen(&sensor2, &sensor3, 15, 0x3C, &SH1106_128x64, -1);
 
 void setup() {
   // required for the i2c protocol
+  Serial.begin(9600);
   Wire.begin();
-  
-  adc.begin(CLOCK_PIN, MOSI_PIN, MISO_PIN, CS_PIN);
   
   // gauge assembly time =====================
     
     // Single Sensor, Boost gauge with alert, OLED and Ring ====
       //sensor2.setReader(&adcRead);
+      strip.addSweep(&sweep1);
+      strip.addSweep(&sweep2);
       
       gauge.add(&sensor);
       gauge.add(&sensor2);
-    
+      gauge.add(&sensor3);
+      
       // add the ring to the gauge
-      gauge.add(&ring);
+      gauge.add(&strip);
       
       // add the oled screen
       gauge.add(&screen);
