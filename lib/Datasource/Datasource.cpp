@@ -14,7 +14,6 @@ readerFunc analogReader = &readAnalog;
 DataSource::DataSource() {};
 
 
-
 AnalogSensor::AnalogSensor(char location) : DataSource() {
     this->location = location;
     this->reader = &analogReader;
@@ -30,6 +29,48 @@ void AnalogSensor::read() {
 
 int AnalogSensor::raw(void) {
     return this->measurement;
+}
+
+
+LiPoBatteryCharge::LiPoBatteryCharge(
+    char pin,
+    int minLevel,
+    int maxLevel
+) : AnalogSensor(pin) {
+    this->minLevel = minLevel;
+    this->maxLevel = maxLevel;
+}
+
+long LiPoBatteryCharge::toPercent() {
+    return map(
+        this->measurement,
+        this->minLevel,
+        this->maxLevel,
+        0,
+        100
+    );
+}
+
+String LiPoBatteryCharge::format(void) {
+    long level = toPercent();
+    char charBuf[10];
+    String formatted = ltoa(level, charBuf, 10);
+    return formatted;
+}
+
+String LiPoBatteryCharge::unit(void) {
+    return "%";
+}
+
+void LiPoBatteryCharge::tick(void) {
+    read();
+}
+
+void LiPoBatteryCharge::init(void) {}
+
+
+float PressureSensor::correctPressure(float uncorrectedPressure) {
+    return uncorrectedPressure - this->barometer->toKpaAbs();
 }
 
 
@@ -50,7 +91,11 @@ float AnalogPressureSensor::toKpaAbs() {
 }
 
 float AnalogPressureSensor::toKpaRel() {
-    return toKpaAbs() - ((float) PressureSensor::ONE_ATM_KPA / 10);
+    if (this->barometerSet) {
+        return correctPressure(toKpaAbs());
+    } else  {
+        return toKpaAbs() - ((float) PressureSensor::ONE_ATM_KPA / 10);
+    }
 }
 
 float AnalogPressureSensor::toPsiAbs() {
@@ -68,7 +113,7 @@ float AnalogPressureSensor::toPsiRel() {
 void AnalogPressureSensor::init(void) {}
 
 String AnalogPressureSensor::format(void) {
-    float level = toPsiRel();
+    float level = roundf(toPsiRel() * 10) / 10;
     char charBuf[10];
     String formatted = dtostrf(level, 5, 1, charBuf);
     return formatted;
@@ -80,6 +125,12 @@ String AnalogPressureSensor::unit(void) {
 
 void AnalogPressureSensor::tick(void) {
     this->read();
+}
+
+
+void PressureSensor::setBarometer(PressureSensor* barometer) {
+    this->barometer = barometer;
+    this->barometerSet = true;
 }
 
 
@@ -179,10 +230,62 @@ int StaticTestSensor::raw(void) {
 };
 
 
+BMP280Sensor::BMP280Sensor(BME280* instance)
+ : DataSource(), GaugeComponent(), PressureSensor() {
+    this->instance = instance;
+}
+
+void BMP280Sensor::init(void) {
+    this->initialized = true;
+}
+
+void BMP280Sensor::read(void) {
+    float pressure = this->instance->pres(BME280::PresUnit_Pa);
+    this->kpaMeasurement = pressure / 1000;
+    this->measurement = (this->kpaMeasurement - this->minKpa) / 
+        (this->maxKpa - this->maxKpa) * 1023;
+}
+
+void BMP280Sensor::tick(void) {
+    if (!this->initialized) {
+        this->init();
+        if (!this->initialized) {
+            return;
+        }
+    }
+    read();
+}
+
+String BMP280Sensor::format(void) {
+    float level = toKpaAbs();
+    char charBuf[10];
+    String formatted = dtostrf(level, 5, 1, charBuf);
+    return formatted;
+}
+
+String BMP280Sensor::unit(void) {
+    return "KPa";
+}
+
+int BMP280Sensor::raw(void) {
+    return this->measurement;
+}
+
+float BMP280Sensor::toKpaAbs() {
+    return this->kpaMeasurement;
+}
+
+void BMP280Sensor::awaitReadyState() {
+    while(!this->instance->begin())
+    {
+        delay(1000);
+    }
+}
+
 
 template <class D, class M>
 OBD2Source<D, M>::OBD2Source(
-    D *obd2Driver,
+    D* obd2Driver,
     String command
 ) : DataSource() {
     this->obd2Driver = obd2Driver;
@@ -197,9 +300,11 @@ void OBD2Source<D, M>::init(void) {
 template <class D, class M>
 void OBD2Source<D, M>::tick(void) {
     M measurement = this->obd2Driver->get(this->command);
-    rawValue = measurement.raw;
-    value = measurement.value;
-    unitValue = measurement.unit;
+    if (!measurement.empty) {
+        rawValue = measurement.raw;
+        value = measurement.value;
+        unitValue = measurement.unit;
+    }
 }
 
 template <class D, class M>

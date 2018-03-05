@@ -1,68 +1,29 @@
+// Use 3.3 Volts
+#define V33
+#define DEBUG_BMP280
+
+#include <Arduino.h>
 #include <Adafruit_MCP3008.h>
-#include "Gauge.h"
-#include "Datasource.h"
-#include "Display.h"
-#include "SSD1306Ascii.h"
 #include <Wire.h>
 #include <SPI.h>
-
+#include <Gauge.h>
+#include <Datasource.h>
+#include <Display.h>
+#include <BME280Spi.h>
 
 //define pin connections
 #define CS_PIN D8
-#define CLOCK_PIN D5
-#define MOSI_PIN D7
-#define MISO_PIN D6
 
 // instantiate gauge container
 CompositeGauge gauge;
 
-// instantiate shared sensor
-TestSensor sensor(90, 120, 1);
-TestSensor sensor2(90, 120, 1);
-TestSensor sensor3(80, 105, 2);
+// instantiate test sensor
+TestSensor testSensor(175,440,4);
+GM3BarMapSensor boostSensor(0, 0, 0.035);
 
-vector<int> sweepLeds1 = {17,16,15,14,13,12,11,10,9,8,7,6};
-vector<int> alertLeds1 = {11,10,9,8,7,6};
-vector<int> sweepLeds2 = {18,19,20,21,22,23,0,1,2,3,4,5};
-vector<int> alertLeds2 = {23,0,1,2,3,4,5};
-
-// ... this is the RGB color of the alert leds
-int alertColor[3] = {10,0,0};
-// ... this is the RGB color of the level display leds
-int sweepColor1[3] = {0,0,1};
-int sweepColor2[3] = {0,0,1};
-int blankColor[3] = {0,0,0};
-
-
-FullSweepIlluminationStrategy illumination;
-AlertOverlappedSweep sweep1(
-  &sensor3,
-  31,
-  99,
-  99,
-  sweepColor1,
-  alertColor,
-  blankColor,
-  &sweepLeds1,
-  &alertLeds1,
-  &illumination
-);
-AlertOverlappedSweep sweep2(
-  &sensor2,
-  31,
-  99,
-  99,
-  sweepColor2,
-  alertColor,
-  blankColor,
-  &sweepLeds2,
-  &alertLeds2,
-  &illumination
-);
-MultiSweepLEDStrip strip(D4, 24);
-
-// instantiate gauge screen
-DualDataSourceScreen screen(&sensor2, &sensor3, 15, 0x3C, &SH1106_128x64, -1);
+BME280Spi::Settings settings(D3);
+BME280Spi bmp(settings);
+BMP280Sensor barometer(&bmp);
 
 Adafruit_MCP3008 adc;
 
@@ -70,37 +31,79 @@ readerFunc adcRead = *([adc](char channel) -> int {
   return adc.readADC(channel);
 });
 
-void setup() {
-  // required for the i2c protocol
-  Serial.begin(9600);
-  Wire.begin();
-  
-  adc.begin(CLOCK_PIN, MOSI_PIN, MISO_PIN, CS_PIN);
-  
-  // gauge assembly time =====================
-    
-    // Single Sensor, Boost gauge with alert, OLED and Ring ====
-      //sensor2.setReader(&adcRead);
-      strip.addSweep(&sweep1);
-      strip.addSweep(&sweep2);
-      
-      gauge.add(&sensor);
-      gauge.add(&sensor2);
-      gauge.add(&sensor3);
-      
-      // add the ring to the gauge
-      gauge.add(&strip);
-      
-      // add the oled screen
-      gauge.add(&screen);
-      
-      // ===================================
+// led indexes for the sweep
+vector<int> sweepLeds1 = {6,7,8,9,10,11,12,13,14,15,16,17};
+vector<int> alertLeds1 = {17};
+vector<int> sweepLeds2 = {5,4,3,2,1,0,23,22,21,20,19,18};
+vector<int> alertLeds2 = {18};
 
+// colors to use
+int sweepColor1[3] = {0, 1, 2};
+int blankColor1[3] = {0, 0, 0};
+int alertColor[3] = {10, 0, 0};
+int sweepColor2[3] =  {10, 1, 0};
+int blankColor2[3] = {1, 2, 1};
+
+// how to illuminate our gauge
+LevelOnlyIlluminationStrategy illuminationStrategy(0);
+FullSweepIlluminationStrategy fullSweepIlluminationStrategy;
+
+Sweep sweep1(
+  &boostSensor,
+  175,
+  410,
+  400,
+  sweepColor2,
+  alertColor,
+  blankColor2,
+  &sweepLeds1,
+  &alertLeds1,
+  &fullSweepIlluminationStrategy
+);
+Sweep sweep2(
+  &testSensor,
+  175,
+  410,
+  400,
+  sweepColor1,
+  alertColor,
+  blankColor1,
+  &sweepLeds2,
+  &alertLeds2,
+  &illuminationStrategy
+);
+MultiSweepLEDStrip ring(D4, 24);
+
+DualDataSourceScreen screen(&boostSensor, &testSensor, 15, 0x3C, &SH1106_128x64, -1);
+
+void setup() {
+  Serial.begin(9600);
+  // required for the i2c & spi protocols
+  Wire.begin();  
+  SPI.begin();
+  bmp.Reset();
+
+  barometer.awaitReadyState();
+
+  // initialize adc reader
+  adc.begin(CS_PIN);
+
+  // gauge assembly time =====================
+  boostSensor.setReader(&adcRead);
+  boostSensor.setBarometer(&barometer);
+  gauge.add(&barometer);
+  gauge.add(&testSensor);
+  gauge.add(&boostSensor);
+  gauge.add(&ring);
+  gauge.add(&screen);
+
+  ring.addSweep(&sweep1);
+  ring.addSweep(&sweep2);
   // =========================================
 }
 
 void loop() {
   // tick, like in a clock, not like the insect
   gauge.tick();
-  delay(0);
+  delay(1);
 }

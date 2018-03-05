@@ -5,6 +5,7 @@
 #include <Gauge.h>
 #include <SoftwareSerial.h>
 #include <elm327.h>
+#include <BME280.h>
 
 
 using namespace std;
@@ -60,6 +61,26 @@ public:
     void setReader(readerFunc *reader);
 };
 
+/**
+ * Li Po battery charge level data source
+ */
+class LiPoBatteryCharge : public AnalogSensor, public GaugeComponent {
+protected:
+    long toPercent();
+    int minLevel;
+    int maxLevel;
+public:
+    LiPoBatteryCharge(
+        char pin,
+        int minLevel,
+        int maxLevel
+    );
+    String format(void);
+    String unit(void);
+    void tick(void);
+    void init(void);
+};
+
 
 /**
  * Abstract PressureSensor
@@ -68,13 +89,18 @@ public:
  */
 class PressureSensor {
 public:
+    PressureSensor* barometer;
+    bool barometerSet = false;
     // divide these 2 by 10
     static const word ONE_ATM_KPA = 1013;
     static const byte ONE_ATM_PSI = 147;
+    void setBarometer(PressureSensor* barometer);
+    virtual float toKpaAbs() = 0;
+    float correctPressure(float uncorrectedPressure);
 };
 
 /**
- * Base class for MPX{xxxx} family of pressure sensors
+ * Base class for analog pressure sensors
  */
 class AnalogPressureSensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
 protected:
@@ -139,6 +165,7 @@ public:
     int raw(void);
 };
 
+
 /**
  * Static test sensor
  */
@@ -155,14 +182,37 @@ public:
 };
 
 
+/**
+ * BMP280 sensor (temp, barometric pressure)
+ */
+class BMP280Sensor : public DataSource, public GaugeComponent, public PressureSensor {
+    BME280* instance;
+    word measurement = 0;
+    float kpaMeasurement = 0;
+    float minKpa = 67.727;
+    float maxKpa = 135.455;
+    bool initialized = false;
+public:
+    BMP280Sensor(BME280* instance);
+    void read();
+    void tick(void);
+    void init(void);
+    String format(void);
+    String unit(void);
+    int raw(void);
+    float toKpaAbs();
+    void awaitReadyState();
+};
+
+
 template <class D, class M>
 class OBD2Source : public DataSource, public GaugeComponent {
 protected:
     D *obd2Driver;
     String command;
-    String value;
-    String unitValue;
-    int rawValue;
+    String value = "";
+    String unitValue = "";
+    int rawValue = 0;
 public:
     OBD2Source(D *obd2Driver, String command);
     void init(void);

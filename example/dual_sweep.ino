@@ -1,9 +1,14 @@
+#include <Adafruit_MCP3008.h>
 #include "Gauge.h"
 #include "Datasource.h"
 #include "Display.h"
 #include "SSD1306Ascii.h"
 #include <Wire.h>
 #include <SPI.h>
+
+
+//define pin connections
+#define CS_PIN D8
 
 // instantiate gauge container
 CompositeGauge gauge;
@@ -56,15 +61,23 @@ MultiSweepLEDStrip strip(D4, 24);
 // instantiate gauge screen
 DualDataSourceScreen screen(&sensor2, &sensor3, 15, 0x3C, &SH1106_128x64, -1);
 
+Adafruit_MCP3008 adc;
+
+readerFunc adcRead = *([adc](char channel) -> int {
+  return adc.readADC(channel);
+});
+
 void setup() {
   // required for the i2c protocol
   Serial.begin(9600);
   Wire.begin();
   
+  adc.begin(CS_PIN);
+
   // gauge assembly time =====================
     
     // Single Sensor, Boost gauge with alert, OLED and Ring ====
-      //sensor2.setReader(&adcRead);
+      sensor2.setReader(&adcRead);
       strip.addSweep(&sweep1);
       strip.addSweep(&sweep2);
       
