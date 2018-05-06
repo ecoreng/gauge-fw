@@ -295,9 +295,9 @@ void DualDataSourceScreen::tick(void) {
 
 
 SingleDataSourceScreen::SingleDataSourceScreen(
+  DataSource *dataSource,
   byte address,
   DevType const *screenType,
-  DataSource *dataSource,
   byte resetPin,
   byte measurementX,
   byte measurementY,

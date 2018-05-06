@@ -44,8 +44,8 @@ SingleSweepLEDStrip ring(
 
 
 // instantiate gauge screen
-//SingleDataSourceScreen screen(0x3D, &Adafruit128x64, &sensor, D4, 15, 2, 4);
-SingleDataSourceScreen screen(0x3C, &SH1106_128x64, &sensor, -1, 15, 2, 4);
+//SingleDataSourceScreen screen(&sensor, 0x3D, &Adafruit128x64, D4, 15, 2, 4);
+SingleDataSourceScreen screen(&sensor, 0x3C, &SH1106_128x64, -1, 15, 2, 4);
 
 void setup() {
   // required for the i2c protocol

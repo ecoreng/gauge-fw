@@ -83,35 +83,45 @@ public:
 
 
 /**
+ * Barometer interface
+ */
+class Barometer {
+public:
+    virtual void tick(void) = 0;
+    virtual float toKpaAbs() = 0;
+};
+
+
+/**
  * Abstract PressureSensor
  * 
  * Holds physics constants for pressure
  */
 class PressureSensor {
 public:
-    PressureSensor* barometer;
+    Barometer* barometer;
     bool barometerSet = false;
     // divide these 2 by 10
     static const word ONE_ATM_KPA = 1013;
     static const byte ONE_ATM_PSI = 147;
-    void setBarometer(PressureSensor* barometer);
+    void setBarometer(Barometer* barometer);
     virtual float toKpaAbs() = 0;
     float correctPressure(float uncorrectedPressure);
 };
 
+
 /**
  * Base class for analog pressure sensors
  */
-class AnalogPressureSensor : public PressureSensor, public AnalogSensor, public GaugeComponent {
+class AnalogPressureSensor : public PressureSensor, public AnalogSensor, public GaugeComponent, public Barometer {
 protected:
     char adcValueOffset = 0;
     float error = 0;
+public:
     float toKpaAbs();
     float toKpaRel();
     float toPsiAbs();
     float toPsiRel();
-    
-public:
     AnalogPressureSensor(char pin, char adcValueOffset = 0, float error = 0);
     String format(void);
     String unit(void);
@@ -185,7 +195,7 @@ public:
 /**
  * BMP280 sensor (temp, barometric pressure)
  */
-class BMP280Sensor : public DataSource, public GaugeComponent, public PressureSensor {
+class BMP280Sensor : public DataSource, public GaugeComponent, public PressureSensor, public Barometer {
     BME280* instance;
     word measurement = 0;
     float kpaMeasurement = 0;

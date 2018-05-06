@@ -1,3 +1,10 @@
+// AUTOMATICALLY GENERATED FILE. PLEASE DO NOT MODIFY IT MANUALLY
+
+// PIO Unified Debugger
+//
+// http://docs.platformio.org/page/plus/debugging.html
+// http://docs.platformio.org/page/section_env_debug.html#projectconf-debug-tool
+
 {
     "version": "0.2.0",
     "configurations": [
@@ -8,7 +15,26 @@
             "name": "PlatformIO Debugger",
             "target": "/home/ecor/Documents/PlatformIO/Projects/171005-200956-esp12e/.pioenvs/esp12e/firmware.elf",
             "gdbpath": "/home/ecor/.platformio/penv/bin/piodebuggdb",
-            "autorun": [ "source .pioinit" ]
+            "autorun": [ "source .pioinit" ],
+            "preLaunchTask": "PlatformIO: Pre-Debug",
+            "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            "type": "platformio-debug",
+            "request": "launch",
+            "name": "PlatformIO Debugger (Dev)",
+            "executable": "/home/ecor/Documents/PlatformIO/Projects/171005-200956-esp12e/.pioenvs/esp12e/firmware.elf",
+            "toolchainBinDir": "",
+            "preLaunchTask": "PlatformIO: Pre-Debug",
+            "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            "type": "platformio-debug",
+            "request": "launch",
+            "name": "PlatformIO Debugger (Dev) (Quick)",
+            "executable": "/home/ecor/Documents/PlatformIO/Projects/171005-200956-esp12e/.pioenvs/esp12e/firmware.elf",
+            "toolchainBinDir": "",
+            "internalConsoleOptions": "openOnSessionStart"
         }
     ]
 }

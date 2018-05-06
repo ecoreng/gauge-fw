@@ -189,9 +189,9 @@ class SingleDataSourceScreen : public AsciiOledScreenWire, public GaugeComponent
     byte unitY;
   public:
     SingleDataSourceScreen(
+      DataSource *dataSource,
       byte address,
       DevType const *screenType,
-      DataSource *dataSource,
       byte resetPin = 4,
       byte measurementX = 0,
       byte measurementY = 0,

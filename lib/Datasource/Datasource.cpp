@@ -73,6 +73,11 @@ float PressureSensor::correctPressure(float uncorrectedPressure) {
     return uncorrectedPressure - this->barometer->toKpaAbs();
 }
 
+void PressureSensor::setBarometer(Barometer* barometer) {
+    this->barometer = barometer;
+    this->barometerSet = true;
+}
+
 
 AnalogPressureSensor::AnalogPressureSensor(char location, char adcValueOffset, float error) :
   AnalogSensor(location), GaugeComponent() {
@@ -92,7 +97,7 @@ float AnalogPressureSensor::toKpaAbs() {
 
 float AnalogPressureSensor::toKpaRel() {
     if (this->barometerSet) {
-        return correctPressure(toKpaAbs());
+        return this->correctPressure(toKpaAbs());
     } else  {
         return toKpaAbs() - ((float) PressureSensor::ONE_ATM_KPA / 10);
     }
@@ -124,13 +129,10 @@ String AnalogPressureSensor::unit(void) {
 }
 
 void AnalogPressureSensor::tick(void) {
+    if (this->barometerSet) {
+        this->barometer->tick();
+    }
     this->read();
-}
-
-
-void PressureSensor::setBarometer(PressureSensor* barometer) {
-    this->barometer = barometer;
-    this->barometerSet = true;
 }
 
 
@@ -241,7 +243,7 @@ void BMP280Sensor::init(void) {
 
 void BMP280Sensor::read(void) {
     float pressure = this->instance->pres(BME280::PresUnit_Pa);
-    this->kpaMeasurement = pressure / 1000;
+    this->kpaMeasurement = pressure / 1;
     this->measurement = (this->kpaMeasurement - this->minKpa) / 
         (this->maxKpa - this->maxKpa) * 1023;
 }

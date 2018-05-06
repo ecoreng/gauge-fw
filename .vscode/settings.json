@@ -58,6 +58,7 @@
         "slist": "cpp"
     },
     "terminal.integrated.env.linux": {
-        "PATH": "/home/ecor/.platformio/penv/bin:/home/ecor/.composer/vendor/bin:/home/ecor/.platformio/penv/bin:/home/ecor/.composer/vendor/bin:/home/ecor/.platformio/penv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin"
+        "PATH": "/home/ecor/.platformio/penv/bin:/home/ecor/.platformio/penv:/home/ecor/.composer/vendor/bin:/home/ecor/.platformio/penv/bin:/home/ecor/.composer/vendor/bin:/home/ecor/.platformio/penv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "PLATFORMIO_CALLER": "vscode"
     }
 }
