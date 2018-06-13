@@ -19,8 +19,9 @@
 CompositeGauge gauge;
 
 // instantiate test sensor
-TestSensor testSensor(175,440,4);
-GM3BarMapSensor boostSensor(0, 0);
+GM3BarMapSensor boostSensor(0, 9);
+AFRSensor wideband(1, 7.35, 22.4);
+
 
 BME280Spi::Settings settings(D3);
 BME280Spi bmp(settings);
@@ -41,10 +42,10 @@ vector<int> boostSweepLeds = {18,19,20,21,22,23,0,1,2,3,4,5};
 vector<int> boostAlertLeds = {5};
 
 // colors to use
-int boostSweepColor[3] = {0, 10, 20};
-int testSweepColor[3] =  {10, 10, 0};
+int boostSweepColor[3] = {1, 5, 2};
+int testSweepColor[3] =  {10, 2, 0};
 int blankColor[3] = {0, 0, 0};
-int alertColor[3] = {200, 0, 0};
+int alertColor[3] = {255, 0, 0};
 
 
 // how to illuminate our gauge
@@ -53,9 +54,9 @@ FullSweepIlluminationStrategy fullSweepIlluminationStrategy;
 
 Sweep boostSweep(
   &boostSensor,
-  175,
-  410,
-  400,
+  100,
+  550,
+  540,
   boostSweepColor,
   alertColor,
   blankColor,
@@ -64,10 +65,10 @@ Sweep boostSweep(
   &fullSweepIlluminationStrategy
 );
 Sweep testSweep(
-  &testSensor,
-  175,
-  410,
-  400,
+  &wideband,
+  0,
+  1024,
+  1025,
   testSweepColor,
   alertColor,
   blankColor,
@@ -78,7 +79,7 @@ Sweep testSweep(
 MultiSweepLEDStrip ring(D4, 24);
 
 
-DualDataSourceScreen screen(&boostSensor, &testSensor, 15, 0x3C, &SH1106_128x64, -1);
+DualDataSourceScreen screen(&boostSensor, &wideband, 15, 0x3C, &SH1106_128x64, -1);
 
 
 void setup() {
@@ -97,8 +98,9 @@ void setup() {
   // // gauge assembly time =====================
   boostSensor.setReader(&adcRead);
   boostSensor.setBarometer(&barometer);
+  wideband.setReader(&adcRead);
   gauge.add(&boostSensor);
-  gauge.add(&testSensor);
+  gauge.add(&wideband);
   gauge.add(&ring);
   gauge.add(&screen);
 
@@ -111,5 +113,5 @@ void setup() {
 void loop() {
   // tick, like in a clock, not like the insect
   gauge.tick();
-  delay(20)  
+  delay(20);
 }

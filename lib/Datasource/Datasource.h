@@ -115,14 +115,14 @@ public:
  */
 class AnalogPressureSensor : public PressureSensor, public AnalogSensor, public GaugeComponent, public Barometer {
 protected:
-    char adcValueOffset = 0;
+    int adcValueOffset = 0;
     float error = 0;
 public:
     float toKpaAbs();
     float toKpaRel();
     float toPsiAbs();
     float toPsiRel();
-    AnalogPressureSensor(char pin, char adcValueOffset = 0, float error = 0);
+    AnalogPressureSensor(char pin, int adcValueOffset = 0, float error = 0);
     String format(void);
     String unit(void);
     void tick(void);
@@ -146,8 +146,8 @@ public:
     static const byte KPA_OFFSET_AT_ZERO_V = 4;
 
     GM3BarMapSensor(char location);    
-    GM3BarMapSensor(char location, byte adcValueOffset);
-    GM3BarMapSensor(char location, byte adcValueOffset, float error);
+    GM3BarMapSensor(char location, int adcValueOffset);
+    GM3BarMapSensor(char location, int adcValueOffset, float error);
     char getMilliVoltPerKpa();
     char getKpaOffset();
 };
@@ -231,5 +231,35 @@ public:
     void tick(void);
     String unit(void);    
 };
+
+
+class LinearSensor : public GaugeComponent, public AnalogSensor {
+protected:
+    float valueAtZero;
+    float valueAtMax;
+    float slope;
+public:
+    LinearSensor(char location, float valueAtZero, float valueAtMax);
+    void init(void);
+    float calculate(void);
+    void tick(void);
+};
+
+
+class LambdaSensor : public LinearSensor {
+public:
+    LambdaSensor(char location, float lambdaAtZero, float lambdaAtMax);
+    String format(void);
+    String unit(void);
+};
+
+
+class AFRSensor : public LinearSensor {
+public:
+    AFRSensor(char location, float afrAtZero, float afrAtMax);
+    String format(void);
+    String unit(void);
+};
+
 
 #endif

@@ -79,7 +79,7 @@ void PressureSensor::setBarometer(Barometer* barometer) {
 }
 
 
-AnalogPressureSensor::AnalogPressureSensor(char location, char adcValueOffset, float error) :
+AnalogPressureSensor::AnalogPressureSensor(char location, int adcValueOffset, float error) :
   AnalogSensor(location), GaugeComponent() {
     this->error = error;
     this->adcValueOffset = adcValueOffset;
@@ -138,13 +138,13 @@ void AnalogPressureSensor::tick(void) {
 
 GM3BarMapSensor::GM3BarMapSensor(
     char location,
-    byte adcValueOffset,
+    int adcValueOffset,
     float error
     ) : AnalogPressureSensor(location, adcValueOffset, error) {}
 
 GM3BarMapSensor::GM3BarMapSensor(
     char location,
-    byte adcValueOffset
+    int adcValueOffset
     ) : AnalogPressureSensor(location, adcValueOffset, 0.0125) {}
 
 GM3BarMapSensor::GM3BarMapSensor(
@@ -232,8 +232,9 @@ int StaticTestSensor::raw(void) {
 };
 
 
-BMP280Sensor::BMP280Sensor(BME280* instance)
- : DataSource(), GaugeComponent(), PressureSensor() {
+BMP280Sensor::BMP280Sensor(
+    BME280* instance
+    ) : DataSource(), GaugeComponent(), PressureSensor() {
     this->instance = instance;
 }
 
@@ -243,7 +244,7 @@ void BMP280Sensor::init(void) {
 
 void BMP280Sensor::read(void) {
     float pressure = this->instance->pres(BME280::PresUnit_Pa);
-    this->kpaMeasurement = pressure / 1;
+    this->kpaMeasurement = pressure / 1000;
     this->measurement = (this->kpaMeasurement - this->minKpa) / 
         (this->maxKpa - this->maxKpa) * 1023;
 }
@@ -322,4 +323,61 @@ String OBD2Source<D, M>::format(void) {
 template <class D, class M>
 String OBD2Source<D, M>::unit(void) {
     return unitValue;
+}
+
+LinearSensor::LinearSensor(
+    char location,
+    float valueAtZero,
+    float valueAtMax
+    ) : AnalogSensor(location), GaugeComponent() {
+        this->valueAtZero = valueAtZero;
+        this->valueAtMax = valueAtMax;
+    }
+
+void LinearSensor::init() {
+    this->slope = (this->valueAtMax - this->valueAtZero) / 1023;
+}
+
+void LinearSensor::tick() {
+    read();
+}
+
+float LinearSensor::calculate() {
+    return this->measurement * this->slope + this->valueAtZero;
+}
+
+
+LambdaSensor::LambdaSensor(
+    char location,
+    float lambdaAtZero,
+    float lambdaAtMax
+    ) : LinearSensor(location, lambdaAtZero, lambdaAtMax) {}
+
+String LambdaSensor::format(void) {
+    float level = LinearSensor::calculate();
+    char charBuf[10];
+    String formatted = dtostrf(level, 5, 2, charBuf);
+    return formatted;
+}
+
+String LambdaSensor::unit(void) {
+    return "lamda";
+}
+
+
+AFRSensor::AFRSensor(
+    char location,
+    float afrAtZero,
+    float afrAtMax
+    ) : LinearSensor(location, afrAtZero, afrAtMax) {}
+
+String AFRSensor::format(void) {
+    float level = LinearSensor::calculate();
+    char charBuf[10];
+    String formatted = dtostrf(level, 5, 1, charBuf);
+    return formatted;
+}
+
+String AFRSensor::unit(void) {
+    return "AFR";
 }
