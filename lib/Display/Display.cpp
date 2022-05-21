@@ -242,7 +242,7 @@ AsciiOledScreenWire::AsciiOledScreenWire(
 }
     
 void AsciiOledScreenWire::init(void){
-    SSD1306Ascii::reset(this->resetPin);
+    oledReset(this->resetPin);
     begin(this->screenType, this->address);
     clear();
     setFont(X11fixed7x14B);
